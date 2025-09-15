@@ -14,7 +14,7 @@ export default function ApplicationReview() {
 
             {/* Logo */}
             <Image
-                source={require('@/assets/images/fixmo logo.png')} // update path as needed
+                source={require('../../assets/images/fixmo-logo.png')} // update path as needed
                 style={styles.logo}
                 resizeMode="contain"
             />

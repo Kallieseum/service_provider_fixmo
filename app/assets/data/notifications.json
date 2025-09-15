@@ -1,0 +1,16 @@
+[
+  {
+    "id": "1",
+    "title": "New Scheduled Booking!",
+    "message": "Click here to view details and prepare for the appointment.",
+    "date": "2025-01-20",
+    "type": "booking"
+  },
+  {
+    "id": "2",
+    "title": "Congratulations!",
+    "message": "Your application has been approved. Click here to see details.",
+    "date": "2025-01-19",
+    "type": "approval"
+  }
+]

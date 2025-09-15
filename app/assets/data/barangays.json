@@ -1,0 +1,24 @@
+{
+  "District 1": {
+    "Manila": {
+      "Barangay 1": "1000",
+      "Barangay 2": "1001",
+      "Barangay 3": "1002"
+    },
+    "Navotas": {
+      "Barangay 4": "1485",
+      "Barangay 5": "1489"
+    }
+  },
+  "District 2": {
+    "Quezon City": {
+      "Barangay A": "1100",
+      "Barangay B": "1101",
+      "Barangay C": "1102"
+    },
+    "Marikina": {
+      "Barangay D": "1800",
+      "Barangay E": "1801"
+    }
+  }
+}

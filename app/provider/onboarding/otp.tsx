@@ -6,6 +6,7 @@ import {
     TouchableOpacity,
     KeyboardAvoidingView,
     Platform,
+    SafeAreaView,
 } from 'react-native';
 import {useRouter, useLocalSearchParams} from 'expo-router';
 import {
@@ -19,20 +20,13 @@ const CELL_COUNT = 6;
 
 export default function OTPScreen() {
     const router = useRouter();
-    const {phone} = useLocalSearchParams();
+    const {email} = useLocalSearchParams<{ email: string }>();
     const [value, setValue] = useState('');
     const ref = useBlurOnFulfill({value, cellCount: CELL_COUNT});
     const [props, getCellOnLayoutHandler] = useClearByFocusCell({value, setValue});
-    const [timer, setTimer] = useState(40); // 1:00 countdown
+    const [timer, setTimer] = useState(40);
     const [isResendVisible, setIsResendVisible] = useState(false);
 
-    // Format phone number: 912 345 6789
-    const formatPhone = (raw?: string) => {
-        if (!raw || raw.length !== 10) return raw;
-        return `${raw.slice(0, 3)} ${raw.slice(3, 6)} ${raw.slice(6)}`;
-    };
-
-    // Countdown logic
     useEffect(() => {
         if (timer > 0) {
             const interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
@@ -48,19 +42,18 @@ export default function OTPScreen() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    const handleVerify = () => {
-        if (value.length === 6) {
-            // You can validate OTP here
+    useEffect(() => {
+        if (value.length === CELL_COUNT) {
+            // ✅ Replace with actual verification logic
+            alert(`Email ${email} verified successfully!`);
             router.push('/provider/onboarding/agreement');
-        } else {
-            alert('Please enter the full 6-digit code');
         }
-    };
+    }, [value]);
 
     const handleResend = () => {
-
-        alert('OTP resent!');
-        setTimer(66); // restart countdown
+        // ✅ Replace this with actual resend email logic
+        alert(`OTP resent to ${email}!`);
+        setTimer(40); // reset countdown
         setIsResendVisible(false);
     };
 
@@ -69,46 +62,44 @@ export default function OTPScreen() {
             style={styles.wrapper}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-            <View style={styles.container}>
-                <Text style={styles.title}>Enter the 6-digit code</Text>
-                <Text style={styles.subtitle}>
-                    Sent to <Text style={styles.phone}>+63 {formatPhone(phone as string)}</Text>
-                </Text>
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.container}>
+                    <Text style={styles.title}>Enter One-Time Pin</Text>
+                    <Text style={styles.subtitle}>
+                        A One-Time Pin was sent to <Text style={styles.email}>{email}</Text>
+                    </Text>
 
-                <CodeField
-                    ref={ref}
-                    {...props}
-                    value={value}
-                    onChangeText={setValue}
-                    cellCount={CELL_COUNT}
-                    rootStyle={styles.codeFieldRoot}
-                    keyboardType="number-pad"
-                    textContentType="oneTimeCode"
-                    renderCell={({index, symbol, isFocused}) => (
-                        <Text
-                            key={index}
-                            style={[styles.cell, isFocused && styles.focusCell]}
-                            onLayout={getCellOnLayoutHandler(index)}
-                        >
-                            {symbol || (isFocused ? <Cursor/> : null)}
+                    <CodeField
+                        ref={ref}
+                        {...props}
+                        value={value}
+                        onChangeText={setValue}
+                        cellCount={CELL_COUNT}
+                        rootStyle={styles.codeFieldRoot}
+                        keyboardType="number-pad"
+                        textContentType="oneTimeCode"
+                        renderCell={({index, symbol, isFocused}) => (
+                            <Text
+                                key={index}
+                                style={[styles.cell, isFocused && styles.focusCell]}
+                                onLayout={getCellOnLayoutHandler(index)}
+                            >
+                                {symbol || (isFocused ? <Cursor/> : null)}
+                            </Text>
+                        )}
+                    />
+
+                    {isResendVisible ? (
+                        <TouchableOpacity onPress={handleResend}>
+                            <Text style={styles.resendButton}>Resend Code</Text>
+                        </TouchableOpacity>
+                    ) : (
+                        <Text style={styles.resend}>
+                            Didn’t receive the code? Request again in {formatTime()}
                         </Text>
                     )}
-                />
-
-                <TouchableOpacity style={styles.button} onPress={handleVerify}>
-                    <Text style={styles.buttonText}>Next</Text>
-                </TouchableOpacity>
-
-                {isResendVisible ? (
-                    <TouchableOpacity onPress={handleResend}>
-                        <Text style={styles.resendButton}>Resend Code</Text>
-                    </TouchableOpacity>
-                ) : (
-                    <Text style={styles.resend}>
-                        Didn’t receive the code? Request again in {formatTime()}
-                    </Text>
-                )}
-            </View>
+                </View>
+            </SafeAreaView>
         </KeyboardAvoidingView>
     );
 }
@@ -118,13 +109,17 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#fff',
     },
+    safeArea: {
+        flex: 1,
+    },
     container: {
         flex: 1,
         padding: 24,
         justifyContent: 'center',
+        alignItems: 'center',
     },
     title: {
-        fontSize: 22,
+        fontSize: 20,
         fontWeight: '600',
         marginBottom: 10,
         textAlign: 'center',
@@ -135,38 +130,29 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         color: '#555',
     },
-    phone: {
+    email: {
         fontWeight: 'bold',
         color: '#000',
     },
     codeFieldRoot: {
         marginBottom: 20,
         justifyContent: 'center',
+        alignItems: 'center',
+        flexDirection: 'row',
     },
     cell: {
-        width: 40,
+        width: 50,
         height: 50,
         lineHeight: 48,
         fontSize: 24,
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: '#ccc',
         textAlign: 'center',
-        marginHorizontal: 5,
-        borderRadius: 8,
+        marginHorizontal: 4,
+        borderRadius: 15,
     },
     focusCell: {
         borderColor: '#008080',
-    },
-    button: {
-        backgroundColor: '#008080',
-        paddingVertical: 14,
-        borderRadius: 30,
-        marginTop: 10,
-    },
-    buttonText: {
-        color: '#fff',
-        fontSize: 16,
-        textAlign: 'center',
     },
     resend: {
         marginTop: 20,

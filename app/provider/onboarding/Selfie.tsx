@@ -5,10 +5,12 @@ import {
     StyleSheet,
     Image,
     Alert,
+    ScrollView,
 } from 'react-native';
 import {useState} from 'react';
 import {useRouter} from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import {Ionicons} from '@expo/vector-icons';
 
 export default function SelfieScreen() {
     const router = useRouter();
@@ -20,7 +22,7 @@ export default function SelfieScreen() {
             return;
         }
 
-        router.push('/provider/onboarding/selectservice');
+        router.push('/provider/onboarding/ncupload');
     };
 
     const handleTakePhoto = async () => {
@@ -42,77 +44,65 @@ export default function SelfieScreen() {
 
     return (
         <View style={styles.container}>
-            {/* Header */}
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                <Text style={styles.backArrow}>←</Text>
-            </TouchableOpacity>
+            <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
+                {/* Header */}
+                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    <Ionicons name="arrow-back" size={30} color="#008080" style={{marginTop: 20}}/>
+                </TouchableOpacity>
 
-            <Text style={styles.title}>Selfie Photo with Valid ID</Text>
+                <Text style={styles.title}>Selfie Photo with Valid ID</Text>
 
-            {/* Photo Section */}
-            <View style={styles.photoSection}>
-                {selfiePhoto ? (
-                    <Image source={{uri: selfiePhoto}} style={styles.photoPreview}/>
-                ) : (
-                    <View style={styles.cameraPlaceholder}>
-                        <Image
-                            source={require('@/assets/images/fixmo logo.png')} // replace with your icon
-                            style={styles.cameraIcon}
-                        />
-                    </View>
+                {/* Photo Section */}
+                <View style={styles.photoSection}>
+                    {selfiePhoto ? (
+                        <Image source={{uri: selfiePhoto}} style={styles.photoPreview}/>
+                    ) : (
+                        <View style={styles.cameraPlaceholder}>
+                            <Ionicons name="camera" size={60} color="#008080"/>
+                        </View>
+                    )}
 
-                )}
+                    <TouchableOpacity style={styles.addPhotoButton} onPress={handleTakePhoto}>
+                        <Text style={styles.addPhotoText}>Add Photo</Text>
+                    </TouchableOpacity>
+                </View>
 
-                <TouchableOpacity style={styles.addPhotoButton} onPress={handleTakePhoto}>
-                    <Text style={styles.addPhotoText}>Add Photo</Text>
+                {/* Instructions */}
+                <Text style={styles.instructions}>
+                    Take a selfie with your valid ID next to your face. Make sure your face and information on your
+                    document are clearly visible.
+                </Text>
+            </ScrollView>
+
+            {/* Fixed Next Button */}
+            <View style={styles.fixedButtonContainer}>
+                <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+                    <Text style={styles.nextText}>Next</Text>
                 </TouchableOpacity>
             </View>
-
-            {/* Instructions */}
-            <Text style={styles.instructions}>
-                Take a selfie with your valid ID next to your face. Make sure your face and information on your document
-                are clearly visible.
-            </Text>
-
-            {/* Next Button */}
-            <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
-                <Text style={styles.nextText}>Next</Text>
-            </TouchableOpacity>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
-    container: {flex: 1, padding: 20, backgroundColor: '#fff'},
+    container: {flex: 1, backgroundColor: '#fff'},
+    scrollContainer: {padding: 20, paddingBottom: 120},
     backButton: {marginBottom: 10},
-    backArrow: {fontSize: 24, color: '#333'},
     title: {fontSize: 22, fontWeight: 'bold', marginBottom: 20},
     photoSection: {alignItems: 'center', marginBottom: 20},
     cameraPlaceholder: {
-        width: 160,
-        height: 160,
-        borderRadius: 80,
+        width: 100,
+        height: 100,
+        borderRadius: 50,
         backgroundColor: '#eee',
         justifyContent: 'center',
         alignItems: 'center',
     },
-    cameraIcon: {
-        width: 40,
-        height: 40,
-        tintColor: '#888',
-        resizeMode: 'contain',
-    },
-    addPhotoButton: {
-        marginTop: 12,
-        paddingVertical: 10,
-        paddingHorizontal: 20,
-        borderRadius: 20,
-        backgroundColor: '#007AFF',
-    },
-    addPhotoText: {color: '#fff', fontSize: 16},
+    addPhotoButton: {marginTop: 10},
+    addPhotoText: {color: '#008080', fontSize: 14},
     photoPreview: {
-        width: 160,
-        height: 160,
+        width: 100,
+        height: 100,
         borderRadius: 80,
         resizeMode: 'cover',
     },
@@ -122,6 +112,14 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 30,
         paddingHorizontal: 10,
+    },
+    fixedButtonContainer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        padding: 20,
+        backgroundColor: '#fff',
     },
     nextButton: {
         backgroundColor: '#008080',

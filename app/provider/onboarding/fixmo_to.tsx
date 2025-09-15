@@ -1,11 +1,11 @@
 import {View, Text} from 'react-native'
 import React from 'react'
 
-const Providerprofile = () => {
+const Fixmo_to = () => {
     return (
         <View>
-            <Text>Providerprofile</Text>
+            <Text>FixmoTo</Text>
         </View>
     )
 }
-export default Providerprofile
+export default Fixmo_to
