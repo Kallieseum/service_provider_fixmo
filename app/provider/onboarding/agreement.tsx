@@ -13,7 +13,7 @@ export default function AgreementScreen() {
     const router = useRouter();
 
     const handleAgree = () => {
-        router.push('/provider/onboarding/profile');
+        router.push('/provider/onboarding/basicinfo');
     };
 
     return (

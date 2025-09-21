@@ -12,7 +12,7 @@ import {
     TouchableWithoutFeedback,
     Keyboard,
 } from "react-native";
-import {useRouter, Stack} from "expo-router";
+import {useRouter} from "expo-router";
 import {Ionicons} from "@expo/vector-icons";
 
 export default function SignIn() {
@@ -27,80 +27,61 @@ export default function SignIn() {
     };
 
     return (
-        <>
-            <Stack.Screen options={{headerShown: false}}/>
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                <KeyboardAvoidingView
-                    style={styles.screen}
-                    behavior={Platform.OS === "ios" ? "padding" : "height"}
-                    keyboardVerticalOffset={60}
-                >
-                    <ScrollView
-                        contentContainerStyle={styles.container}
-                        keyboardShouldPersistTaps="handled"
-                    >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <KeyboardAvoidingView
+                style={styles.screen}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={60}
+            >
+                <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+                    <Image
+                        source={require("../../../app/assets/images/fixmo-logo.png")}
+                        style={styles.logo}
+                        resizeMode="contain"
+                    />
 
-                        <Image
-                            source={require("../../../src/assets/images/fixmo-logo.png")}
-                            style={styles.logo}
-                            resizeMode="contain"
-                        />
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Email address"
+                        placeholderTextColor="#888"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        value={email}
+                        onChangeText={setEmail}
+                    />
 
+                    <View style={styles.passwordContainer}>
                         <TextInput
-                            style={styles.input}
-                            placeholder="Email address"
+                            style={[styles.input, styles.passwordInput]}
+                            placeholder="Password"
                             placeholderTextColor="#888"
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            value={email}
-                            onChangeText={setEmail}
+                            secureTextEntry={!showPassword}
+                            value={password}
+                            onChangeText={setPassword}
                         />
-
-                        <View style={styles.passwordContainer}>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Password"
-                                placeholderTextColor="#888"
-                                secureTextEntry={!showPassword}
-                                value={password}
-                                onChangeText={setPassword}
-                            />
-                            <TouchableOpacity
-                                style={styles.eyeIcon}
-                                onPress={() => setShowPassword(!showPassword)}
-                            >
-                                <Ionicons
-                                    name={showPassword ? "eye-off" : "eye"}
-                                    size={20}
-                                    color="#555"
-                                />
-                            </TouchableOpacity>
-                        </View>
-
-                        <TouchableOpacity style={styles.button} onPress={handleSignIn}>
-                            <Text style={styles.buttonText}>Sign in</Text>
+                        <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
+                            <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#555"/>
                         </TouchableOpacity>
+                    </View>
 
-                        <TouchableOpacity
-                            onPress={() => router.push("/provider/onboarding/forgot-password")}
-                        >
-                            <Text style={styles.link}>Forgot the password?</Text>
-                        </TouchableOpacity>
+                    <TouchableOpacity style={styles.button} onPress={handleSignIn}>
+                        <Text style={styles.buttonText}>Sign in</Text>
+                    </TouchableOpacity>
 
-                        <View style={{height: 80}}/>
+                    <TouchableOpacity onPress={() => router.push("/provider/onboarding/forgot-password")}>
+                        <Text style={styles.link}>Forgot the password?</Text>
+                    </TouchableOpacity>
 
-                        <TouchableOpacity
-                            onPress={() => router.push("/provider/onboarding/signup")}
-                        >
-                            <Text style={styles.link}>
-                                Don&apos;t have an account?{" "}
-                                <Text style={styles.linkText}>Sign up</Text>
-                            </Text>
-                        </TouchableOpacity>
-                    </ScrollView>
-                </KeyboardAvoidingView>
-            </TouchableWithoutFeedback>
-        </>
+                    <View style={{height: 80}}/>
+
+                    <TouchableOpacity onPress={() => router.push("/provider/onboarding/email")}>
+                        <Text style={styles.link}>
+                            Don't have an account? <Text style={styles.linkText}>Sign up</Text>
+                        </Text>
+                    </TouchableOpacity>
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
     );
 }
 
@@ -128,6 +109,9 @@ const styles = StyleSheet.create({
         fontSize: 16,
         marginBottom: 15,
         color: "#000",
+    },
+    passwordInput: {
+        paddingRight: 45,
     },
     passwordContainer: {
         position: "relative",
