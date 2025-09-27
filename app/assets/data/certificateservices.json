@@ -1,0 +1,88 @@
+{
+  "categories": [
+    {
+      "title": "Plumbing NC II",
+      "services": [
+        "Pipe Fitting",
+        "Troubleshooting of Leaks",
+        "Sink Installation",
+        "Toilet Installation",
+        "Shower Installation",
+        "Water Heater Installation"
+      ]
+    },
+    {
+      "title": "Electrical Installation and Maintenance (EIM) NC II",
+      "services": [
+        "Circuit Wiring",
+        "Outlet and Switch Installation",
+        "Cable Management",
+        "Electrical Troubleshooting"
+      ]
+    },
+    {
+      "title": "Refrigeration and Air-Conditioning (RAC) Servicing NC II (Domestic)",
+      "services": [
+        "Install domestic refrigeration and air-conditioning units",
+        "Service & maintain domestic refrigeration and air-conditioning units",
+        "Troubleshoot & repair domestic refrigeration and air-conditioning systems"
+      ]
+    },
+    {
+      "title": "Carpentry NC II",
+      "services": [
+        "Woodworking",
+        "Furniture Assembly",
+        "Furniture Repair",
+        "Framing",
+        "Finishing Works"
+      ]
+    },
+    {
+      "title": "Masonry NC II & NC III",
+      "services": [
+        "Block/Brick Layering",
+        "Plaster Wall/Surface Finishing",
+        "Basic Structural Works",
+        "Applying Special Cement Finishes",
+        "Repair of Defective Concrete"
+      ]
+    },
+    {
+      "title": "Tile Setting NC II",
+      "services": [
+        "Surface Preparation",
+        "Cutting Tiles",
+        "Laying Tiles",
+        "Grouting"
+      ]
+    },
+    {
+      "title": "Construction Painting NC II/NC III",
+      "services": [
+        "Surface Sanding",
+        "Retouch/Repaint",
+        "Wall Painting",
+        "Mixing/Tinting Paints"
+      ]
+    },
+    {
+      "title": "Consumer Electronics Servicing (CES) NC II",
+      "services": [
+        "TV Repair",
+        "Audio Systems Repair",
+        "Washing Machine Circuit Repair",
+        "Refrigerator Circuit Diagnosis"
+      ]
+    },
+    {
+      "title": "Computer System Servicing (CSS) NC II",
+      "services": [
+        "PC Troubleshooting",
+        "Network Setup (Wi-Fi, printer sharing)",
+        "Virus Removal",
+        "Data Backup"
+      ]
+    }
+  ]
+}

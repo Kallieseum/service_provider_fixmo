@@ -1,16 +1,122 @@
-[
-  {
-    "id": "1",
-    "title": "New Scheduled Booking!",
-    "message": "Click here to view details and prepare for the appointment.",
-    "date": "2025-01-20",
-    "type": "booking"
-  },
-  {
-    "id": "2",
-    "title": "Congratulations!",
-    "message": "Your application has been approved. Click here to see details.",
-    "date": "2025-01-19",
-    "type": "approval"
-  }
-]
+{
+  "Application": [
+    {
+      "id": "A1",
+      "title": "Congratulations!",
+      "message": "Your provider application has been approved. You can now accept bookings!",
+      "type": "application_approved"
+    },
+    {
+      "id": "A2",
+      "title": "Application Pending",
+      "message": "Your provider application is still under review. We’ll notify you once it’s approved or denied.",
+      "type": "application_pending"
+    },
+    {
+      "id": "A3",
+      "title": "Application Denied",
+      "message": "Unfortunately, your provider application was denied. Reason: {{denialReason}}.",
+      "type": "application_denied"
+    }
+  ],
+  "Booking": [
+    {
+      "id": "B1",
+      "title": "New Scheduled Booking!",
+      "message": "You have a new booking scheduled for {{serviceName}} on {{date}} at {{time}}. Click here to view details and prepare.",
+      "type": "booking"
+    },
+    {
+      "id": "B2",
+      "title": "Booking Update",
+      "message": "The booking for {{serviceName}} on {{date}} has been updated. Check the new details now.",
+      "type": "booking_update"
+    },
+    {
+      "id": "B3",
+      "title": "Booking Cancelled by Customer",
+      "message": "The customer cancelled the service {{serviceName}} scheduled on {{date}}. Reason: {{cancellationReason}}.",
+      "type": "booking_cancelled_customer"
+    },
+    {
+      "id": "B4",
+      "title": "Booking Cancelled by You",
+      "message": "You cancelled the service {{serviceName}} scheduled on {{date}}. Reason: {{cancellationReason}}.",
+      "type": "booking_cancelled_provider"
+    },
+    {
+      "id": "B5",
+      "title": "Booking Completed!",
+      "message": "You successfully completed the {{serviceName}} appointment on {{date}}. Great work!",
+      "type": "booking_completed"
+    },
+    {
+      "id": "B6",
+      "title": "Booking Marked as No-Show",
+      "message": "The customer did not show up for the {{serviceName}} appointment on {{date}}.",
+      "type": "booking_no_show"
+    },
+    {
+      "id": "B7",
+      "title": "Reminder: Upcoming Booking",
+      "message": "You have an upcoming appointment for {{serviceName}} on {{date}} at {{time}}. Don’t forget to prepare!",
+      "type": "booking_reminder"
+    }
+  ],
+  "Payments": [
+    {
+      "id": "P1",
+      "title": "Payment Received!",
+      "message": "You received a payment of {{amount}} for {{serviceName}} completed on {{date}}.",
+      "type": "payment_received"
+    },
+    {
+      "id": "P2",
+      "title": "Payout Sent",
+      "message": "Your payout of {{amount}} has been processed and sent to your account ending in {{accountNumber}}.",
+      "type": "payout_sent"
+    }
+  ],
+  "Reviews": [
+    {
+      "id": "R1",
+      "title": "New Review Received",
+      "message": "You received a new review for {{serviceName}}: “{{reviewSnippet}}”.",
+      "type": "review_received"
+    }
+  ],
+  "System": [
+    {
+      "id": "S1",
+      "title": "System Maintenance",
+      "message": "FixMo will undergo maintenance on {{date}} between {{timeStart}} and {{timeEnd}}. Some features may be unavailable.",
+      "type": "system_notice"
+    }
+  ],
+  "Escalations": [
+    {
+      "id": "E1",
+      "title": "Urgent Reschedule Request",
+      "message": "The customer requested an urgent reschedule for {{serviceName}} originally set on {{date}}. Please respond as soon as possible.",
+      "type": "urgent_reschedule"
+    },
+    {
+      "id": "E2",
+      "title": "Dispute Filed",
+      "message": "A dispute has been filed regarding the booking for {{serviceName}} on {{date}}. Click here to review and provide your side.",
+      "type": "dispute_filed"
+    },
+    {
+      "id": "E3",
+      "title": "Customer Reported an Issue",
+      "message": "The customer reported an issue with the service {{serviceName}}. Reason: {{issueDescription}}. Please check and respond.",
+      "type": "customer_issue_reported"
+    },
+    {
+      "id": "E4",
+      "title": "Admin Intervention",
+      "message": "FixMo support is reviewing a reported issue with your service {{serviceName}} on {{date}}. Expect further instructions.",
+      "type": "admin_intervention"
+    }
+  ]
+}

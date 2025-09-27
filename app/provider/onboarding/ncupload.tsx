@@ -3,45 +3,69 @@ import {
     Text,
     StyleSheet,
     TouchableOpacity,
-    Image,
-    Alert,
     ScrollView,
     TextInput,
     Modal,
+    Alert,
     Platform,
-} from 'react-native';
-import {useRouter} from 'expo-router';
-import * as DocumentPicker from 'expo-document-picker';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import {Picker} from '@react-native-picker/picker';
-import {useState} from 'react';
-import {Ionicons} from '@expo/vector-icons';
+} from "react-native";
+import {useRouter} from "expo-router";
+import * as DocumentPicker from "expo-document-picker";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import {Picker} from "@react-native-picker/picker";
+import {useState} from "react";
+import {Ionicons} from "@expo/vector-icons";
+import certificateServicesJson from "../../assets/data/certificateservices.json";
+
+// ---------- Types ----------
+type CertificateService = {
+    title: string;
+    services: string[];
+};
+
+type CertificateServicesJSON = {
+    categories: CertificateService[];
+};
+
+type Certificate = {
+    type: string;
+    number: string;
+    expiry: Date | null;
+    file: string | null;
+};
+
+// ---------- Data ----------
+const certificateServices: CertificateServicesJSON = certificateServicesJson;
 
 export default function RequirementsUpload() {
     const router = useRouter();
 
     // Professional Info
-    const [uliNumber, setUliNumber] = useState('');
+    const [uliNumber, setUliNumber] = useState("");
     const [showTooltip, setShowTooltip] = useState(false);
 
     // Security
-    const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
+    const [password, setPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
 
-    // TESDA Certificates (multiple)
-    const [certificates, setCertificates] = useState([
-        {type: '', number: '', expiry: null as Date | null, file: null as string | null}
+    // TESDA Certificates
+    const [certificates, setCertificates] = useState<Certificate[]>([
+        {type: "", number: "", expiry: null, file: null},
     ]);
 
     const [showDatePicker, setShowDatePicker] = useState<number | null>(null);
 
     // Add new certificate
     const addCertificate = () => {
-        setCertificates([...certificates, {type: '', number: '', expiry: null, file: null}]);
+        setCertificates([
+            ...certificates,
+            {type: "", number: "", expiry: null, file: null},
+        ]);
     };
 
     const isPasswordValid = (password: string) => {
-        const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+        const regex =
+            /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
         return regex.test(password);
     };
 
@@ -50,38 +74,39 @@ export default function RequirementsUpload() {
             !uliNumber ||
             !password ||
             !confirmPassword ||
-            certificates.some(cert => !cert.type || !cert.number || !cert.expiry || !cert.file)
+            certificates.some(
+                (cert) =>
+                    !cert.type || !cert.number || !cert.expiry || !cert.file
+            )
         ) {
-            Alert.alert('Missing Information', 'Please complete all required fields.');
+            Alert.alert(
+                "Missing Information",
+                "Please complete all required fields."
+            );
             return;
         }
 
         if (password !== confirmPassword) {
-            Alert.alert('Password Mismatch', 'Passwords do not match. Please try again.');
+            Alert.alert("Password Mismatch", "Passwords do not match.");
             return;
         }
 
         if (!isPasswordValid(password)) {
             Alert.alert(
-                'Invalid Password',
-                'Password must be at least 8 characters long and include uppercase, lowercase, number, and special character.'
+                "Invalid Password",
+                "Password must be at least 8 characters and include uppercase, lowercase, number, and special character."
             );
             return;
         }
 
-        router.push('/provider/onboarding/drugtestupload');
+        router.push("/provider/onboarding/drugtestupload");
     };
 
     return (
         <View style={{flex: 1}}>
             <ScrollView contentContainerStyle={styles.scrollContainer}>
                 <View style={styles.contentWrapper}>
-                    {/* Back Button */}
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={30} color="#008080"/>
-                    </TouchableOpacity>
-
-                    {/* Professional Information */}
+                    {/* Professional Info */}
                     <Text style={styles.sectionHeader}>Professional Information</Text>
                     <View style={styles.section}>
                         <Text style={styles.title}>Unique Learner Identifier</Text>
@@ -95,7 +120,11 @@ export default function RequirementsUpload() {
                                 onChangeText={setUliNumber}
                             />
                             <TouchableOpacity onPress={() => setShowTooltip(true)}>
-                                <Ionicons name="help-circle-outline" size={20} color="#008080"/>
+                                <Ionicons
+                                    name="help-circle-outline"
+                                    size={20}
+                                    color="#008080"
+                                />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -112,8 +141,8 @@ export default function RequirementsUpload() {
                             onChangeText={setPassword}
                         />
                         <Text style={styles.passwordNote}>
-                            Must be at least 8 characters and include uppercase, lowercase, number, and special
-                            character.
+                            Must be at least 8 characters and include uppercase,
+                            lowercase, number, and special character.
                         </Text>
 
                         <Text style={styles.title}>Confirm Password</Text>
@@ -141,12 +170,19 @@ export default function RequirementsUpload() {
                                     }}
                                 >
                                     <Picker.Item label="Select Certificate" value=""/>
-                                    <Picker.Item label="NC II" value="nc2"/>
-                                    <Picker.Item label="NC III" value="nc3"/>
-                                    <Picker.Item label="Other" value="other"/>
+                                    {certificateServices.categories.map(
+                                        (cat: CertificateService, i: number) => (
+                                            <Picker.Item
+                                                key={i}
+                                                label={cat.title}
+                                                value={cat.title}
+                                            />
+                                        )
+                                    )}
                                 </Picker>
                             </View>
 
+                            {/* Certificate Number */}
                             <Text style={styles.title}>Certificate Number</Text>
                             <TextInput
                                 style={styles.input}
@@ -159,12 +195,17 @@ export default function RequirementsUpload() {
                                 }}
                             />
 
+                            {/* Expiry Date */}
                             <Text style={styles.title}>Expiry Date</Text>
                             <TouchableOpacity
                                 onPress={() => setShowDatePicker(index)}
                                 style={styles.input}
                             >
-                                <Text>{cert.expiry ? cert.expiry.toDateString() : 'Select expiry date'}</Text>
+                                <Text>
+                                    {cert.expiry
+                                        ? cert.expiry.toDateString()
+                                        : "Select expiry date"}
+                                </Text>
                             </TouchableOpacity>
 
                             {showDatePicker === index && (
@@ -183,41 +224,48 @@ export default function RequirementsUpload() {
                                 />
                             )}
 
+                            {/* Upload Certificate */}
                             <Text style={styles.title}>Upload Certificate File</Text>
-                            <View style={styles.verticalIconGroup}>
-                                <View style={styles.iconWrapper}>
-                                    <TouchableOpacity
-                                        onPress={async () => {
-                                            const result = await DocumentPicker.getDocumentAsync({
-                                                type: '*/*',
-                                                copyToCacheDirectory: true,
-                                            });
-                                            if ('assets' in result && result.assets && result.assets.length > 0) {
-                                                const updated = [...certificates];
-                                                updated[index].file = result.assets[0].uri;
-                                                setCertificates(updated);
-                                            }
-                                        }}
-                                        style={styles.circleButton}
-                                    >
-                                        <Ionicons name="cloud-upload-outline" size={40} color="#008080"/>
-                                    </TouchableOpacity>
-                                    <Text style={styles.iconLabel}>Upload File</Text>
-                                </View>
-                            </View>
+                            <TouchableOpacity
+                                onPress={async () => {
+                                    const result =
+                                        await DocumentPicker.getDocumentAsync({
+                                            type: "*/*",
+                                            copyToCacheDirectory: true,
+                                        });
+                                    if (
+                                        "assets" in result &&
+                                        result.assets &&
+                                        result.assets.length > 0
+                                    ) {
+                                        const updated = [...certificates];
+                                        updated[index].file = result.assets[0].uri;
+                                        setCertificates(updated);
+                                    }
+                                }}
+                                style={styles.circleButton}
+                            >
+                                <Ionicons
+                                    name="cloud-upload-outline"
+                                    size={40}
+                                    color="#008080"
+                                />
+                            </TouchableOpacity>
 
                             {cert.file && (
                                 <Text style={styles.note}>
-                                    Selected File: {cert.file.split('/').pop()}
+                                    Selected File: {cert.file.split("/").pop()}
                                 </Text>
                             )}
 
-                            {/* Remove Button (only show if more than 1 certificate) */}
+                            {/* Remove Button */}
                             {certificates.length > 1 && (
                                 <TouchableOpacity
                                     style={styles.removeButton}
                                     onPress={() => {
-                                        const updated = certificates.filter((_, i) => i !== index);
+                                        const updated = certificates.filter(
+                                            (_, i) => i !== index
+                                        );
                                         setCertificates(updated);
                                     }}
                                 >
@@ -228,8 +276,11 @@ export default function RequirementsUpload() {
                         </View>
                     ))}
 
-                    {/* Add Certificate Button */}
-                    <TouchableOpacity onPress={addCertificate} style={styles.addButton}>
+                    {/* Add Certificate */}
+                    <TouchableOpacity
+                        onPress={addCertificate}
+                        style={styles.addButton}
+                    >
                         <Text style={styles.addButtonText}>+ Add Certificate</Text>
                     </TouchableOpacity>
                 </View>
@@ -242,13 +293,17 @@ export default function RequirementsUpload() {
                 </TouchableOpacity>
             </View>
 
-            {/* Tooltip Modal */}
+            {/* Tooltip */}
             <Modal visible={showTooltip} transparent animationType="fade">
-                <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowTooltip(false)}>
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    onPress={() => setShowTooltip(false)}
+                >
                     <View style={styles.tooltipBox}>
                         <Text style={styles.tooltipText}>
-                            The Unique Learner Identifier (ULI) is a 12-digit number assigned to every
-                            student or trainee enrolled in TESDA programs.
+                            The Unique Learner Identifier (ULI) is a 12-digit number
+                            assigned to every student or trainee enrolled in TESDA
+                            programs.
                         </Text>
                     </View>
                 </TouchableOpacity>
@@ -257,161 +312,97 @@ export default function RequirementsUpload() {
     );
 }
 
+// ---------- Styles ----------
 const styles = StyleSheet.create({
     scrollContainer: {
         flexGrow: 1,
         padding: 20,
-        backgroundColor: '#fff',
+        backgroundColor: "#fff",
         paddingBottom: 140,
     },
-    contentWrapper: {
-        flex: 1,
-    },
-    section: {
-        marginBottom: 40,
-    },
+    contentWrapper: {flex: 1},
+    section: {marginBottom: 40},
     sectionHeader: {
         fontSize: 22,
-        fontWeight: 'bold',
+        fontWeight: "bold",
         marginTop: 30,
         marginBottom: 10,
-        color: '#555',
+        color: "#555",
     },
-    title: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginBottom: 8,
-        marginTop: 10,
-    },
-    subtitle: {
-        fontSize: 14,
-        color: '#555',
-        marginBottom: 16,
-    },
-    uliRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
+    title: {fontSize: 16, fontWeight: "bold", marginBottom: 8, marginTop: 10},
+    uliRow: {flexDirection: "row", alignItems: "center"},
     input: {
         borderWidth: 1,
-        borderColor: '#eee',
+        borderColor: "#eee",
         borderRadius: 30,
         padding: 12,
         fontSize: 16,
-        backgroundColor: '#f0f0f0',
+        backgroundColor: "#f0f0f0",
         marginTop: 10,
     },
     pickerWrapper: {
         borderWidth: 1,
-        borderColor: '#eee',
+        borderColor: "#eee",
         borderRadius: 30,
-        backgroundColor: '#f0f0f0',
+        backgroundColor: "#f0f0f0",
         marginTop: 10,
-        overflow: 'hidden',
+        overflow: "hidden",
     },
-    passwordNote: {
-        fontSize: 12,
-        color: '#888',
-        marginTop: 4,
-        marginBottom: 12,
-    },
-    verticalIconGroup: {
-        alignItems: 'center',
-        gap: 30,
-        marginBottom: 16,
-    },
-    iconWrapper: {
-        alignItems: 'center',
-        gap: 8,
-    },
+    passwordNote: {fontSize: 12, color: "#888", marginTop: 4, marginBottom: 12},
     circleButton: {
         width: 100,
         height: 100,
         borderRadius: 50,
-        backgroundColor: '#f0f0f0',
-        justifyContent: 'center',
-        alignItems: 'center',
+        backgroundColor: "#f0f0f0",
+        justifyContent: "center",
+        alignItems: "center",
+        marginTop: 12,
     },
-    iconLabel: {
-        fontSize: 12,
-        color: '#333',
-    },
-    note: {
-        fontSize: 12,
-        color: '#888',
-        textAlign: 'center',
-        marginTop: 8,
-    },
-    preview: {
-        width: '100%',
-        height: 200,
-        marginTop: 10,
-        borderRadius: 8,
-    },
+    note: {fontSize: 12, color: "#888", textAlign: "center", marginTop: 8},
     fixedButtonContainer: {
-        position: 'absolute',
+        position: "absolute",
         bottom: 0,
         left: 0,
         right: 0,
         padding: 20,
-        backgroundColor: '#fff',
+        backgroundColor: "#fff",
     },
     nextButton: {
-        backgroundColor: '#008080',
+        backgroundColor: "#008080",
         paddingVertical: 14,
         borderRadius: 30,
-        alignItems: 'center',
+        alignItems: "center",
     },
-    nextText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
+    nextText: {color: "#fff", fontSize: 16, fontWeight: "bold"},
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        alignItems: 'center',
+        backgroundColor: "rgba(0,0,0,0.5)",
+        justifyContent: "center",
+        alignItems: "center",
         padding: 20,
     },
     tooltipBox: {
-        backgroundColor: '#fff',
+        backgroundColor: "#fff",
         padding: 16,
         borderRadius: 10,
         maxWidth: 300,
     },
-    tooltipText: {
-        fontSize: 14,
-        color: '#333',
-    },
-    backButton: {
-        marginBottom: 10,
-        marginLeft: 10,
-        marginTop: Platform.select({ios: 60, android: 40}),
-    },
+    tooltipText: {fontSize: 14, color: "#333"},
     addButton: {
-        backgroundColor: '#e0f7f7',
+        backgroundColor: "#e0f7f7",
         paddingVertical: 12,
         paddingHorizontal: 20,
         borderRadius: 30,
-        alignSelf: 'center',
+        alignSelf: "center",
         marginBottom: 20,
     },
-    addButtonText: {
-        color: '#008080',
-        fontWeight: 'bold',
-        fontSize: 14,
-    },
+    addButtonText: {color: "#008080", fontWeight: "bold", fontSize: 14},
     removeButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        flexDirection: "row",
+        alignItems: "center",
         marginTop: 10,
-        alignSelf: 'flex-end',
+        alignSelf: "flex-end",
         gap: 4,
     },
-    removeText: {
-        color: 'red',
-        fontSize: 12,
-        fontWeight: '600',
-    },
+    removeText: {color: "red", fontSize: 12, fontWeight: "600"},
 });

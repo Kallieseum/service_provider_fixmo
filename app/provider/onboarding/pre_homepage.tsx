@@ -1,157 +1,205 @@
-import {useState, useRef} from 'react';
+import React, {useRef, useCallback, useState} from "react";
 import {
     View,
     Text,
     StyleSheet,
-    Image,
-    Pressable,
     ScrollView,
-    ImageSourcePropType,
-    Alert,
-} from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import Svg, {Path} from 'react-native-svg';
-import {useUserContext} from '@/context/UserContext';   // ✅ now includes notifications
-import {Link, useRouter} from 'expo-router';
-import {Ionicons} from '@expo/vector-icons';
+    Pressable,
+    TouchableOpacity,
+    Modal,
+} from "react-native";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
+import {useRouter, useLocalSearchParams} from "expo-router";
+import {Ionicons} from "@expo/vector-icons";
+import * as SplashScreen from "expo-splash-screen";
+import {useFonts} from "expo-font";
 
-type TabKey = 'home' | 'task' | 'calendar' | 'chat' | 'profile';
+import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
+import OngoingServiceDetails from "../../provider/integration/ongoing-service-details";
 
-const tabIcons: Record<TabKey, ImageSourcePropType> = {
-    home: require('../../assets/images/home icon.png'),
-    task: require('../../assets/images/task icon.png'),
-    calendar: require('../../assets/images/calendar icon.png'),
-    chat: require('../../assets/images/chat icon.png'),
-    profile: require('../../assets/images/profile icon.png'),
+SplashScreen.preventAutoHideAsync();
+
+type ScheduledWork = {
+    status: "scheduled" | "ongoing" | "finished";
+    client: string;
+    service: string;
+    datetime: string;
 };
 
-export default function Pre_homepage() {
-    const {user, notificationCount} = useUserContext(); // ✅ get user + notifications
-    const [activeTab, setActiveTab] = useState<TabKey>('home');
+export default function Homepage() {
+    const scrollRef = useRef<ScrollView>(null);
     const insets = useSafeAreaInsets();
     const router = useRouter();
-    const scrollRef = useRef<ScrollView>(null);
+    const [modalVisible, setModalVisible] = useState(false);
 
-    const formattedName = user?.name
-        ? user.name
-            .split(' ')
-            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-            .join(' ')
-        : 'Guest';
+    // Load fonts
+    const [fontsLoaded] = useFonts({
+        PoppinsRegular: require("../../assets/fonts/Poppins-Regular.ttf"),
+        PoppinsBold: require("../../assets/fonts/Poppins-Bold.ttf"),
+        PoppinsSemiBold: require("../../assets/fonts/Poppins-SemiBold.ttf"),
+    });
 
-    const getGreeting = () => {
+    const onLayoutRootView = useCallback(async () => {
+        if (fontsLoaded) await SplashScreen.hideAsync();
+    }, [fontsLoaded]);
+
+    if (!fontsLoaded) return null;
+
+    // User & approval state
+    const {client, service, datetime, status} = useLocalSearchParams();
+    const isApproved = true;
+
+    const formattedName = "Juan Dela Cruz";
+
+    // Greeting
+    const greetingText = (() => {
         const hour = new Date().getHours();
-        if (hour < 12) return 'Good Morning,';
-        if (hour < 18) return 'Good Afternoon,';
-        return 'Good Evening,';
+        if (hour < 12) return "Good Morning,";
+        if (hour < 18) return "Good Afternoon,";
+        return "Good Evening,";
+    })();
+
+    // Appointment
+    const sampleAppointment: ScheduledWork = {
+        status: "ongoing",
+        client: "Maria de la Cruz",
+        service: "Electrical Repair",
+        datetime: "June 23, 2025 | 2:00 PM",
     };
 
-    const greetingText = getGreeting();
-
-    const tabs: { key: TabKey; label: string }[] = [
-        {key: 'home', label: 'Home'},
-        {key: 'task', label: 'Tasks'},
-        {key: 'calendar', label: 'Calendar'},
-        {key: 'chat', label: 'Chat'},
-        {key: 'profile', label: 'Profile'},
-    ];
-
-    const handleTabPress = (tabKey: TabKey) => {
-        setActiveTab(tabKey);
-
-        switch (tabKey) {
-            case 'home':
-                scrollRef.current?.scrollTo({y: 0, animated: true});
-                break;
-
-            case 'task':
-                if (user?.status === 'approved') {
-                    router.push('/provider/onboarding/fixmo_to');
-                } else {
-                    Alert.alert(
-                        'Not available yet',
-                        'Your account is pending approval. Please wait until it is approved to access this feature.',
-                        [{text: 'Okay', onPress: () => router.push('/provider/onboarding/pre_homepage')}]
-                    );
-                }
-                break;
-
-            case 'calendar':
-                if (user?.status === 'approved') {
-                    router.push('/provider/onboarding/calendarscreen');
-                } else {
-                    Alert.alert(
-                        'Not available yet',
-                        'Your account is pending. Please wait until it is approved to access this feature.',
-                        [{text: 'Okay', onPress: () => router.push('/provider/onboarding/pre_homepage')}]
-                    );
-                }
-                break;
-
-            case 'chat':
-                if (user?.status === 'approved') {
-                    router.push('/provider/onboarding/chatlist');
-                } else {
-                    Alert.alert(
-                        'Not available yet',
-                        'Your account is pending. Please wait until it is approved to access this feature.',
-                        [{text: 'Okay', onPress: () => router.push('/provider/onboarding/pre_homepage')}]
-                    );
-                }
-                break;
-
-            case 'profile':
-                router.push('/provider/onboarding/providerprofile');
-                break;
+    const appointment: ScheduledWork | null = client
+        ? {
+            status: (status as "ongoing" | "scheduled" | "finished") || "ongoing",
+            client: client as string,
+            service: service as string,
+            datetime: datetime as string,
         }
+        : sampleAppointment;
+
+    const statusColors: Record<string, string> = {
+        scheduled: "#4CAF50",
+        ongoing: "#F44336",
+        finished: "#9E9E9E",
     };
+
+    // Notifications
+    const sampleNotifications = [
+        {
+            id: "1",
+            title: "New Scheduled Booking!",
+            message: "Click here to view details and prepare for the appointment.",
+            date: "2025-09-27",
+            type: "booking",
+            icon: "calendar-outline",
+            read: false,
+        },
+        {
+            id: "2",
+            title: "Congratulations!",
+            message: "Your application has been approved. Click here to see details.",
+            date: "2025-09-26",
+            type: "approval",
+            icon: "checkmark-circle-outline",
+            read: true,
+        },
+        {
+            id: "3",
+            title: "Service Cancelled",
+            message: "You cancelled the service due to personal reasons.",
+            date: "2025-09-25",
+            type: "cancellation",
+            icon: "close-circle-outline",
+            read: false,
+        },
+    ];
+    const notificationCount = sampleNotifications.filter((n) => !n.read).length;
 
     return (
-        <View style={styles.screen}>
+        <ApprovedScreenWrapper activeTab="home" isApproved={isApproved}>
             <ScrollView
                 ref={scrollRef}
                 contentContainerStyle={[styles.scrollContent, {paddingTop: insets.top + 20}]}
+                onLayout={onLayoutRootView}
             >
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.greetingRow}>
-                        <Image
-                            source={require('../../assets/images/userprofile icon.png')}
-                            style={styles.avatar}
-                        />
+                        <Ionicons name="person-circle-outline" size={45} color="#008080" style={styles.avatar}/>
                         <View style={styles.greetingBlock}>
                             <Text style={styles.greeting}>{greetingText}</Text>
                             <Text style={styles.name}>{formattedName}</Text>
                         </View>
                     </View>
 
-                    <Link href="/notification" asChild>
-                        <Pressable>
-                            <View style={styles.bellWrapper}>
-                                <Ionicons name="notifications" size={25} color={'#008080'}/>
-                                {notificationCount > 0 && ( // ✅ use real notif count
-                                    <View style={styles.badge}>
-                                        <Text style={styles.badgeText}>{notificationCount}</Text>
-                                    </View>
-                                )}
-                            </View>
-                        </Pressable>
-                    </Link>
+                    <Pressable
+                        onPress={() =>
+                            router.push({
+                                pathname: "/notification",
+                                params: {notifications: JSON.stringify(sampleNotifications)},
+                            })
+                        }
+                    >
+                        <View style={styles.bellWrapper}>
+                            <Ionicons name="notifications-outline" size={26} color="#333"/>
+                            {notificationCount > 0 && (
+                                <View style={styles.badge}>
+                                    <Text style={styles.badgeText}>{notificationCount}</Text>
+                                </View>
+                            )}
+                        </View>
+                    </Pressable>
                 </View>
 
                 {/* FixMo Today */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>FixMo Today</Text>
-                    <View style={styles.pendingBox}>
-                        <Image
-                            source={require('../../assets/images/fixmo-logo.png')}
-                            style={styles.fixmoLogo}
-                        />
-                        <Text style={styles.pendingText}>
-                            Your account is currently under review. Once{' '}
-                            <Text style={styles.highlight}>approved</Text>, you'll start receiving bookings here.
-                        </Text>
-                    </View>
+                    {isApproved && appointment ? (
+                        <TouchableOpacity onPress={() => setModalVisible(true)}>
+                            <View style={styles.appointmentBox}>
+                                <View
+                                    style={[styles.statusTag, {backgroundColor: statusColors[appointment.status] || "#777"}]}>
+                                    <Text style={styles.statusText}>
+                                        {appointment.status === "ongoing" ? "On going" : appointment.status}
+                                    </Text>
+                                </View>
+                                <Text style={styles.clientName}>{appointment.client}</Text>
+                                <Text style={styles.serviceType}>
+                                    Service Type: <Text style={styles.highlightService}>{appointment.service}</Text>
+                                </Text>
+
+                                <View style={styles.row}>
+                                    <View style={styles.row}>
+                                        <Ionicons name="calendar-outline" size={16} color="#00796B"/>
+                                        <Text style={styles.datetime}>{appointment.datetime}</Text>
+                                    </View>
+
+                                    <TouchableOpacity
+                                        style={styles.chatButton}
+                                        onPress={() =>
+                                            router.push({
+                                                pathname: "/provider/integration/messagescreen",
+                                                params: {
+                                                    clientId: "1",
+                                                    clientName: appointment.client,
+                                                },
+                                            })
+                                        }
+                                    >
+                                        <Ionicons name="chatbubble-ellipses-outline" size={20} color="#00796B"/>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={styles.pendingBox}>
+                            <Ionicons name="hammer-outline" size={40} color="#009688"/>
+                            <Text style={styles.pendingText}>
+                                Your account is currently under review. Once <Text
+                                style={styles.highlight}>approved</Text>, you'll start
+                                receiving bookings here.
+                            </Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Availability */}
@@ -159,100 +207,80 @@ export default function Pre_homepage() {
                     <Text style={styles.sectionTitle}>Availability</Text>
                     <View style={styles.pendingBox}>
                         <Text style={styles.pendingText}>
-                            Availability will be enabled once your account is approved.
+                            {isApproved
+                                ? "You can now manage your availability in Calendar."
+                                : "Availability will be enabled once your account is approved."}
                         </Text>
                     </View>
                 </View>
             </ScrollView>
 
-            {/* Blob Background */}
-            <View style={styles.blobWrapper}>
-                <Svg width="100%" height={80} viewBox="0 0 400 80">
-                    <Path d="M0,40 C100,80 300,0 400,40 L400,80 L0,80 Z" fill="#B2EBF2"/>
-                </Svg>
-            </View>
-
-            {/* Bottom Navigation */}
-            <View style={styles.navBar}>
-                {tabs.map((tab) => (
-                    <Pressable
-                        key={tab.key}
-                        onPress={() => handleTabPress(tab.key)}
-                        style={({pressed}) => [
-                            styles.navIconWrapper,
-                            activeTab === tab.key && styles.activeCircle,
-                            activeTab === tab.key && {transform: [{translateY: -35}]},
-                            pressed && {opacity: 0.7},
-                        ]}
-                    >
-                        <Image
-                            source={tabIcons[tab.key]}
-                            style={[styles.navIcon, activeTab === tab.key && styles.activeIcon]}
-                        />
-                    </Pressable>
-                ))}
-            </View>
-        </View>
+            {/* Modal for Ongoing Service */}
+            <Modal animationType="slide" transparent visible={modalVisible}
+                   onRequestClose={() => setModalVisible(false)}>
+                <View style={styles.modalBackground}>
+                    <View style={styles.modalCard}>
+                        <Pressable style={styles.closeBtn} onPress={() => setModalVisible(false)}>
+                            <Ionicons name="close" size={22} color="#333"/>
+                        </Pressable>
+                        <OngoingServiceDetails/>
+                    </View>
+                </View>
+            </Modal>
+        </ApprovedScreenWrapper>
     );
 }
 
 const styles = StyleSheet.create({
-    screen: {flex: 1, backgroundColor: '#fff'},
     scrollContent: {paddingBottom: 100},
     header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
+        flexDirection: "row",
+        justifyContent: "space-between",
         paddingHorizontal: 20,
-        alignItems: 'center',
-        marginBottom: 20,
+        alignItems: "center",
+        marginVertical: 20,
     },
-    greetingRow: {flexDirection: 'row', alignItems: 'center'},
-    avatar: {width: 45, height: 45, borderRadius: 25, marginRight: 10},
-    greetingBlock: {flexDirection: 'column'},
-    greeting: {fontSize: 14, color: '#333'},
-    name: {fontSize: 17, fontWeight: 'bold', color: '#008080'},
-    bellWrapper: {position: 'relative'},
-    badge: {
-        position: 'absolute',
-        right: -5,
-        top: -5,
-        backgroundColor: 'red',
-        borderRadius: 10,
-        paddingHorizontal: 5,
-        paddingVertical: 1,
-    },
-    badgeText: {color: 'white', fontSize: 10, fontWeight: 'bold'},
+    greetingRow: {flexDirection: "row", alignItems: "center"},
+    avatar: {marginRight: 10},
+    greetingBlock: {flexDirection: "column"},
+    greeting: {fontSize: 14, color: "#333", fontFamily: "PoppinsRegular"},
+    name: {fontSize: 17, color: "#008080", fontFamily: "PoppinsBold"},
+    bellWrapper: {position: "relative"},
     section: {marginHorizontal: 20, marginBottom: 20},
-    sectionTitle: {fontSize: 18, fontWeight: 'bold', marginBottom: 10},
-    pendingBox: {
-        backgroundColor: '#f2f2f2',
-        borderRadius: 30,
-        padding: 15,
-        alignItems: 'center',
+    sectionTitle: {fontSize: 18, marginBottom: 10, fontFamily: "PoppinsRegular"},
+    pendingBox: {backgroundColor: "#f2f2f2", borderRadius: 30, padding: 15, alignItems: "center"},
+    pendingText: {fontSize: 14, color: "#555", textAlign: "center", fontFamily: "PoppinsRegular"},
+    highlight: {color: "#009688", fontFamily: "PoppinsBold"},
+    highlightService: {color: "#00796B", fontFamily: "PoppinsSemiBold"},
+    appointmentBox: {backgroundColor: "#f2f2f2", borderRadius: 20, padding: 15},
+    statusTag: {paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginBottom: 8, alignSelf: "flex-start"},
+    statusText: {color: "#fff", fontSize: 12, fontFamily: "PoppinsSemiBold"},
+    clientName: {fontSize: 16, color: "#333", fontFamily: "PoppinsSemiBold"},
+    serviceType: {fontSize: 14, color: "#555", marginTop: 4, fontFamily: "PoppinsRegular"},
+    datetime: {fontSize: 13, color: "#00796B", marginLeft: 6, fontFamily: "PoppinsRegular"},
+    row: {flexDirection: "row", alignItems: "center", marginTop: 10},
+    chatButton: {
+        backgroundColor: "#fff",
+        padding: 8,
+        borderRadius: 20,
+        marginLeft: "auto",
+        shadowColor: "#000",
+        shadowOpacity: 0.1,
+        shadowOffset: {width: 0, height: 2},
+        shadowRadius: 4,
+        elevation: 3,
     },
-    fixmoLogo: {width: 40, height: 40, marginBottom: 10},
-    pendingText: {fontSize: 14, color: '#555', textAlign: 'center'},
-    highlight: {fontWeight: 'bold', color: '#009688'},
-    blobWrapper: {position: 'absolute', bottom: 0, width: '100%', height: 80, zIndex: -1},
-    navBar: {
-        flexDirection: 'row',
-        justifyContent: 'space-around',
-        alignItems: 'center',
-        backgroundColor: '#f2f2f2',
-        paddingVertical: 12,
-        borderTopLeftRadius: 25,
-        borderTopRightRadius: 25,
-        elevation: 4,
+    badge: {
+        position: "absolute",
+        top: -5,
+        right: -5,
+        backgroundColor: "#FF5252",
+        borderRadius: 8,
+        paddingHorizontal: 4,
+        paddingVertical: 1
     },
-    navIconWrapper: {
-        width: 70,
-        height: 60,
-        borderRadius: 30,
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#fff',
-    },
-    activeCircle: {backgroundColor: '#fff', elevation: 8},
-    navIcon: {width: 40, height: 40, tintColor: '#008080'},
-    activeIcon: {tintColor: '#008080'},
+    badgeText: {color: "#fff", fontSize: 10, fontFamily: "PoppinsBold"},
+    modalBackground: {flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center"},
+    modalCard: {backgroundColor: "#EDEDED", borderRadius: 16, padding: 16, width: "90%", maxHeight: "85%"},
+    closeBtn: {alignSelf: "flex-end", marginBottom: 10},
 });
