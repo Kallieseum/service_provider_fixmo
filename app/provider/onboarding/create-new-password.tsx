@@ -1,35 +1,99 @@
-import React, {useState} from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
-    View,
+    ActivityIndicator,
+    Alert,
+    BackHandler,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    StyleSheet,
-    Alert,
+    View,
 } from "react-native";
-import {Ionicons} from "@expo/vector-icons";
-import {useRouter, useLocalSearchParams} from "expo-router";
+import { verifyOTPAndResetPassword } from "../../../src/api/auth.api";
 
 export default function CreateNewPassword() {
     const router = useRouter();
-    const {email} = useLocalSearchParams<{ email: string }>();
+    const {email, otp} = useLocalSearchParams<{ email: string; otp: string }>();
     const [password, setPassword] = useState("");
     const [confirm, setConfirm] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    const handleResetPassword = () => {
-        if (password.length < 6) {
-            Alert.alert("Weak Password", "Password must be at least 6 characters.");
+    // Prevent back navigation
+    useFocusEffect(
+        React.useCallback(() => {
+            const onBackPress = () => {
+                Alert.alert(
+                    "Exit Password Reset?",
+                    "Going back will cancel the password reset process.",
+                    [
+                        { text: "Stay", style: "cancel" },
+                        {
+                            text: "Exit",
+                            onPress: () => router.replace("/provider/onboarding/forgot-password"),
+                            style: "destructive"
+                        }
+                    ]
+                );
+                return true; // Prevent default back behavior
+            };
+
+            const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+            return () => backHandler.remove();
+        }, [])
+    );
+
+    const handleResetPassword = async () => {
+        if (!password.trim()) {
+            Alert.alert("Missing Password", "Please enter a new password.");
             return;
         }
+
+        if (password.length < 8) {
+            Alert.alert("Weak Password", "Password must be at least 8 characters.");
+            return;
+        }
+
         if (password !== confirm) {
             Alert.alert("Mismatch", "Passwords do not match.");
             return;
         }
-        // TODO: Call API to reset password
-        Alert.alert("Success", "Your password has been reset!");
-        router.replace("/provider/onboarding/signin");
+
+        if (!otp) {
+            Alert.alert("Error", "OTP not found. Please start the process again.");
+            router.replace("/provider/onboarding/forgot-password");
+            return;
+        }
+
+        setLoading(true);
+
+        try {
+            await verifyOTPAndResetPassword(email, otp, password);
+            
+            Alert.alert(
+                "Success",
+                "Your password has been reset successfully! Please login with your new password.",
+                [
+                    {
+                        text: "OK",
+                        onPress: () => {
+                            router.replace("/provider/onboarding/signin");
+                        }
+                    }
+                ]
+            );
+        } catch (error: any) {
+            Alert.alert(
+                "Error",
+                error.message || "Failed to reset password. Please try again."
+            );
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -83,8 +147,16 @@ export default function CreateNewPassword() {
                 </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.button} onPress={handleResetPassword}>
-                <Text style={styles.buttonText}>Continue</Text>
+            <TouchableOpacity 
+                style={[styles.button, loading && styles.buttonDisabled]} 
+                onPress={handleResetPassword}
+                disabled={loading}
+            >
+                {loading ? (
+                    <ActivityIndicator color="#fff" />
+                ) : (
+                    <Text style={styles.buttonText}>Continue</Text>
+                )}
             </TouchableOpacity>
         </View>
     );
@@ -131,6 +203,10 @@ const styles = StyleSheet.create({
         paddingVertical: 15,
         borderRadius: 10,
         alignItems: "center",
+    },
+    buttonDisabled: {
+        backgroundColor: "#ccc",
+        opacity: 0.6,
     },
     buttonText: {
         color: "#fff",

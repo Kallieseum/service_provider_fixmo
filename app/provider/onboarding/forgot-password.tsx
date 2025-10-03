@@ -1,26 +1,65 @@
-import React, {useState} from "react";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
-    View,
+    ActivityIndicator,
+    Alert,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    StyleSheet,
-    Alert,
+    View,
 } from "react-native";
-import {useRouter} from "expo-router";
+import { requestForgotPasswordOTP } from "../../../src/api/auth.api";
 
 export default function ForgotPassword() {
     const router = useRouter();
     const [email, setEmail] = useState("");
+    const [loading, setLoading] = useState(false);
 
-    const handleSendCode = () => {
-        if (!email.includes("@")) {
+    const validateEmail = (email: string): boolean => {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    };
+
+    const handleSendCode = async () => {
+        if (!email.trim()) {
+            Alert.alert("Missing Email", "Please enter your email address.");
+            return;
+        }
+
+        if (!validateEmail(email)) {
             Alert.alert("Invalid Email", "Please enter a valid email address.");
             return;
         }
-        // TODO: integrate backend API for sending OTP
-        Alert.alert("Code Sent", `Verification code sent to ${email}`);
-        router.push("/provider/onboarding/verify-code");
+
+        setLoading(true);
+
+        try {
+            const response = await requestForgotPasswordOTP(email);
+            
+            Alert.alert(
+                "OTP Sent",
+                `A verification code has been sent to ${email}. Please check your inbox.`,
+                [
+                    {
+                        text: "OK",
+                        onPress: () => {
+                            router.push({
+                                pathname: "/provider/onboarding/verify-code",
+                                params: { email }
+                            });
+                        }
+                    }
+                ]
+            );
+        } catch (error: any) {
+            Alert.alert(
+                "Error",
+                error.message || "Failed to send verification code. Please try again."
+            );
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -40,8 +79,16 @@ export default function ForgotPassword() {
                 autoCapitalize="none"
             />
 
-            <TouchableOpacity style={styles.button} onPress={handleSendCode}>
-                <Text style={styles.buttonText}>Continue</Text>
+            <TouchableOpacity 
+                style={[styles.button, loading && styles.buttonDisabled]} 
+                onPress={handleSendCode}
+                disabled={loading}
+            >
+                {loading ? (
+                    <ActivityIndicator color="#fff" />
+                ) : (
+                    <Text style={styles.buttonText}>Continue</Text>
+                )}
             </TouchableOpacity>
         </View>
     );
@@ -81,6 +128,10 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         width: "100%",
         alignItems: "center",
+    },
+    buttonDisabled: {
+        backgroundColor: "#ccc",
+        opacity: 0.6,
     },
     buttonText: {
         color: "#fff",

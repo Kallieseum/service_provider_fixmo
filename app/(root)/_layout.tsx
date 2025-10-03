@@ -1,12 +1,18 @@
-import {Slot} from "expo-router";
-import {SafeAreaView} from "react-native-safe-area-context";
-import {KeyboardAvoidingView, Platform, Text} from "react-native";
-import {StatusBar} from "expo-status-bar";
-import {useEffect, useRef} from "react";
+import { BookingProvider, useBookingContext } from "@/context/BookingContext";
+import { useFonts } from "expo-font";
 import * as Notifications from "expo-notifications";
-import {BookingProvider, useBookingContext} from "@/context/BookingContext";
-import {useFonts} from "expo-font";
+import { Slot } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
+import { StatusBar } from "expo-status-bar";
+import { useEffect, useRef } from "react";
+import { KeyboardAvoidingView, Platform, Text } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+
+// Prevent the splash screen from auto-hiding before asset loading is complete
+SplashScreen.preventAutoHideAsync().catch(() => {
+    // In case splash screen is not available on the platform
+    console.warn('SplashScreen.preventAutoHideAsync() failed');
+});
 
 // 📌 Configure notification handler
 Notifications.setNotificationHandler({
@@ -60,15 +66,18 @@ export default function Layout() {
 
     // 👀 Keep splash screen until fonts are loaded
     useEffect(() => {
-        async function prepare() {
-            if (!fontsLoaded) {
-                await SplashScreen.preventAutoHideAsync();
-            } else {
-                await SplashScreen.hideAsync();
+        async function hideSplash() {
+            if (fontsLoaded) {
+                try {
+                    await SplashScreen.hideAsync();
+                } catch (error) {
+                    // Handle the case where splash screen is not available
+                    console.warn('SplashScreen.hideAsync() failed:', error);
+                }
             }
         }
 
-        prepare();
+        hideSplash();
     }, [fontsLoaded]);
 
     if (!fontsLoaded) {

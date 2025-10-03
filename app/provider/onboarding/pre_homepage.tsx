@@ -1,23 +1,26 @@
-import React, {useRef, useCallback, useState} from "react";
-import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    Pressable,
-    TouchableOpacity,
-    Modal,
-} from "react-native";
-import {useSafeAreaInsets} from "react-native-safe-area-context";
-import {useRouter, useLocalSearchParams} from "expo-router";
-import {Ionicons} from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
+import { useFonts } from "expo-font";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import {useFonts} from "expo-font";
+import React, { useEffect, useRef, useState } from "react";
+import {
+    Modal,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
 import OngoingServiceDetails from "../../provider/integration/ongoing-service-details";
 
-SplashScreen.preventAutoHideAsync();
+// Prevent auto-hide with error handling
+SplashScreen.preventAutoHideAsync().catch(() => {
+    console.warn('SplashScreen.preventAutoHideAsync() failed');
+});
 
 type ScheduledWork = {
     status: "scheduled" | "ongoing" | "finished";
@@ -39,8 +42,18 @@ export default function Homepage() {
         PoppinsSemiBold: require("../../assets/fonts/Poppins-SemiBold.ttf"),
     });
 
-    const onLayoutRootView = useCallback(async () => {
-        if (fontsLoaded) await SplashScreen.hideAsync();
+    // Hide splash screen when fonts are loaded
+    useEffect(() => {
+        async function hideSplash() {
+            if (fontsLoaded) {
+                try {
+                    await SplashScreen.hideAsync();
+                } catch (error) {
+                    console.warn('SplashScreen.hideAsync() failed:', error);
+                }
+            }
+        }
+        hideSplash();
     }, [fontsLoaded]);
 
     if (!fontsLoaded) return null;
@@ -119,7 +132,6 @@ export default function Homepage() {
             <ScrollView
                 ref={scrollRef}
                 contentContainerStyle={[styles.scrollContent, {paddingTop: insets.top + 20}]}
-                onLayout={onLayoutRootView}
             >
                 {/* Header */}
                 <View style={styles.header}>

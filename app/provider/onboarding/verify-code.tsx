@@ -1,21 +1,24 @@
-import React, {useState, useEffect} from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
+    ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
-    Alert,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import {useRouter, useLocalSearchParams} from "expo-router";
 import {
     CodeField,
     Cursor,
     useBlurOnFulfill,
     useClearByFocusCell,
 } from "react-native-confirmation-code-field";
+import { requestForgotPasswordOTP, verifyProviderOTP } from "../../../src/api/auth.api";
 
 const CELL_COUNT = 6;
 
@@ -30,6 +33,10 @@ export default function VerifyCode() {
     });
     const [timer, setTimer] = useState(40);
     const [isResendVisible, setIsResendVisible] = useState(false);
+    const [verifying, setVerifying] = useState(false);
+    const [resending, setResending] = useState(false);
+    const [otpStatus, setOtpStatus] = useState<'none' | 'verifying' | 'valid' | 'invalid'>('none');
+    const [otpMessage, setOtpMessage] = useState('');
 
     useEffect(() => {
         if (timer > 0) {
@@ -50,21 +57,80 @@ export default function VerifyCode() {
     };
 
     useEffect(() => {
-        if (value.length === CELL_COUNT) {
-            // ✅ Replace this with actual verification logic
-            Alert.alert("Success", `Email ${email} verified successfully!`);
-            router.push({
-                pathname: "/provider/onboarding/create-new-password",
-                params: {email}, // pass email forward
-            });
+        if (value.length === CELL_COUNT && !verifying) {
+            handleVerifyOTP();
+        } else if (value.length < CELL_COUNT) {
+            setOtpStatus('none');
+            setOtpMessage('');
         }
     }, [value]);
 
-    const handleResend = () => {
-        // ✅ Replace this with actual resend logic
-        Alert.alert("OTP Sent", `OTP has been resent to ${email}`);
-        setTimer(40);
-        setIsResendVisible(false);
+    const handleVerifyOTP = async () => {
+        if (verifying) return; // Prevent multiple calls
+        
+        setVerifying(true);
+        setOtpStatus('verifying');
+        setOtpMessage('Verifying OTP...');
+
+        try {
+            // Verify OTP with backend
+            const result = await verifyProviderOTP(email, value);
+            
+            if (result.valid) {
+                setOtpStatus('valid');
+                setOtpMessage('✓ OTP verified successfully');
+                setVerifying(false);
+                
+                // Wait a moment to show success state
+                setTimeout(() => {
+                    router.replace({
+                        pathname: "/provider/onboarding/create-new-password",
+                        params: { email, otp: value },
+                    });
+                }, 800);
+            } else {
+                // Invalid OTP - show red state and alert
+                setOtpStatus('invalid');
+                setOtpMessage('Invalid OTP. Please try again.');
+                setVerifying(false);
+                
+                Alert.alert(
+                    "Invalid OTP",
+                    "The code you entered is incorrect. Please try again.",
+                    [{ text: "OK", onPress: () => setValue("") }]
+                );
+            }
+        } catch (error: any) {
+            console.error('OTP verification error:', error);
+            setOtpStatus('invalid');
+            setOtpMessage(error.message || 'Invalid OTP. Please try again.');
+            setVerifying(false);
+            
+            Alert.alert(
+                "Invalid OTP",
+                error.message || "The code you entered is incorrect. Please try again.",
+                [{ text: "OK", onPress: () => setValue("") }]
+            );
+        }
+    };
+
+    const handleResend = async () => {
+        setResending(true);
+
+        try {
+            await requestForgotPasswordOTP(email);
+            Alert.alert("OTP Sent", `A new verification code has been sent to ${email}`);
+            setTimer(40);
+            setIsResendVisible(false);
+            setValue("");
+        } catch (error: any) {
+            Alert.alert(
+                "Error",
+                error.message || "Failed to resend OTP. Please try again."
+            );
+        } finally {
+            setResending(false);
+        }
     };
 
     return (
@@ -89,10 +155,16 @@ export default function VerifyCode() {
                         rootStyle={styles.codeFieldRoot}
                         keyboardType="number-pad"
                         textContentType="oneTimeCode"
+                        editable={!verifying && otpStatus !== 'valid'}
                         renderCell={({index, symbol, isFocused}) => (
                             <Text
                                 key={index}
-                                style={[styles.cell, isFocused && styles.focusCell]}
+                                style={[
+                                    styles.cell,
+                                    isFocused && styles.focusCell,
+                                    otpStatus === 'valid' && styles.validCell,
+                                    otpStatus === 'invalid' && styles.invalidCell,
+                                ]}
                                 onLayout={getCellOnLayoutHandler(index)}
                             >
                                 {symbol || (isFocused ? <Cursor/> : null)}
@@ -100,9 +172,35 @@ export default function VerifyCode() {
                         )}
                     />
 
+                    {/* Status Message with Icon */}
+                    {otpMessage && (
+                        <View style={styles.statusContainer}>
+                            {otpStatus === 'verifying' && (
+                                <ActivityIndicator size="small" color="#008080" style={styles.statusIcon} />
+                            )}
+                            {otpStatus === 'valid' && (
+                                <Ionicons name="checkmark-circle" size={20} color="#4CAF50" style={styles.statusIcon} />
+                            )}
+                            {otpStatus === 'invalid' && (
+                                <Ionicons name="close-circle" size={20} color="#F44336" style={styles.statusIcon} />
+                            )}
+                            <Text style={[
+                                styles.statusMessage,
+                                otpStatus === 'valid' && styles.validMessage,
+                                otpStatus === 'invalid' && styles.invalidMessage,
+                            ]}>
+                                {otpMessage}
+                            </Text>
+                        </View>
+                    )}
+
                     {isResendVisible ? (
-                        <TouchableOpacity onPress={handleResend}>
-                            <Text style={styles.resendButton}>Resend Code</Text>
+                        <TouchableOpacity onPress={handleResend} disabled={resending}>
+                            {resending ? (
+                                <ActivityIndicator size="small" color="#008080" />
+                            ) : (
+                                <Text style={styles.resendButton}>Resend Code</Text>
+                            )}
                         </TouchableOpacity>
                     ) : (
                         <Text style={styles.resend}>
@@ -165,6 +263,38 @@ const styles = StyleSheet.create({
     },
     focusCell: {
         borderColor: "#008080",
+    },
+    validCell: {
+        borderWidth: 2,
+        borderColor: "#4CAF50",
+        backgroundColor: "#E8F5E9",
+    },
+    invalidCell: {
+        borderWidth: 2,
+        borderColor: "#F44336",
+        backgroundColor: "#FFEBEE",
+    },
+    statusContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 10,
+        marginBottom: 10,
+    },
+    statusIcon: {
+        marginRight: 8,
+    },
+    statusMessage: {
+        fontSize: 14,
+        textAlign: "center",
+    },
+    validMessage: {
+        color: "#4CAF50",
+        fontWeight: "600",
+    },
+    invalidMessage: {
+        color: "#F44336",
+        fontWeight: "600",
     },
     resend: {
         marginTop: 20,

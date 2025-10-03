@@ -1,38 +1,95 @@
-import React, {useState} from "react";
+import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import * as ImagePicker from "expo-image-picker";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
-    View,
+    ActionSheetIOS,
+    ActivityIndicator,
+    Alert,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
-    StyleSheet,
-    Image,
-    Alert,
-    ScrollView,
-    KeyboardAvoidingView,
-    Platform,
+    View,
 } from "react-native";
-import {Ionicons} from "@expo/vector-icons";
-import {useRouter} from "expo-router";
-import * as ImagePicker from "expo-image-picker";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import { checkPhoneAvailability, checkUsernameAvailability } from "../../../src/api/auth.api";
 
 export default function ProfileScreen() {
     const router = useRouter();
+    const params = useLocalSearchParams<{ 
+        email: string; 
+        otp: string;
+        // Optional params for when navigating back
+        photo?: string;
+        firstName?: string;
+        middleName?: string;
+        lastName?: string;
+        dob?: string;
+        phone?: string;
+        username?: string;
+    }>();
 
-    // --- Personal Info ---
-    const [photo, setPhoto] = useState<string | null>(null);
-    const [firstName, setFirstName] = useState("");
-    const [middleName, setMiddleName] = useState("");
-    const [lastName, setLastName] = useState("");
-    const [dob, setDob] = useState(""); // yyyy-mm-dd
+    // Extract email and otp
+    const paramEmail = params.email;
+    const otp = params.otp;
+
+    // --- Personal Info --- Initialize from params if available
+    const [photo, setPhoto] = useState<string | null>(params.photo || null);
+    const [firstName, setFirstName] = useState(params.firstName || "");
+    const [middleName, setMiddleName] = useState(params.middleName || "");
+    const [lastName, setLastName] = useState(params.lastName || "");
+    const [dob, setDob] = useState(params.dob || ""); // yyyy-mm-dd
     const [showDatePicker, setShowDatePicker] = useState(false);
 
-    // --- Contact Info ---
-    const [email, setEmail] = useState("");
-    const [phone, setPhone] = useState("");
-    const [username, setUsername] = useState("");
+    // --- Contact Info --- Initialize from params if available
+    const [email, setEmail] = useState(paramEmail || "");
+    const [phone, setPhone] = useState(params.phone || "");
+    const [username, setUsername] = useState(params.username || "");
 
-    // --- CAMERA ---
+    // --- Validation States ---
+    const [usernameStatus, setUsernameStatus] = useState<'none' | 'checking' | 'available' | 'taken'>('none');
+    const [phoneStatus, setPhoneStatus] = useState<'none' | 'checking' | 'available' | 'taken'>('none');
+    const [usernameMessage, setUsernameMessage] = useState('');
+    const [phoneMessage, setPhoneMessage] = useState('');
+
+    // Debounce timers
+    const usernameTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const phoneTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // --- PHOTO SELECTION ---
+    const selectPhotoOption = () => {
+        if (Platform.OS === 'ios') {
+            ActionSheetIOS.showActionSheetWithOptions(
+                {
+                    options: ['Cancel', 'Take Photo', 'Choose from Gallery'],
+                    cancelButtonIndex: 0,
+                },
+                (buttonIndex) => {
+                    if (buttonIndex === 1) {
+                        openCamera();
+                    } else if (buttonIndex === 2) {
+                        openGallery();
+                    }
+                }
+            );
+        } else {
+            Alert.alert(
+                'Select Photo',
+                'Choose an option',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Take Photo', onPress: openCamera },
+                    { text: 'Choose from Gallery', onPress: openGallery },
+                ]
+            );
+        }
+    };
+
     const openCamera = async () => {
         const {status} = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== "granted") {
@@ -50,13 +107,146 @@ export default function ProfileScreen() {
         }
     };
 
+    const openGallery = async () => {
+        const {status} = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+            Alert.alert("Permission Required", "Gallery access is needed to choose a photo.");
+            return;
+        }
+        const result = await ImagePicker.launchImageLibraryAsync({
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+        });
+
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+            setPhoto(result.assets[0].uri);
+        }
+    };
+
     // --- DOB ---
     const handleDateChange = (_event: any, selectedDate?: Date) => {
         setShowDatePicker(false);
         if (selectedDate) {
+            const age = calculateAge(selectedDate);
+            if (age < 18) {
+                Alert.alert('Age Restriction', 'You must be at least 18 years old to register.');
+                return;
+            }
+            if (age > 100) {
+                Alert.alert('Invalid Age', 'Please enter a valid date of birth.');
+                return;
+            }
             setDob(selectedDate.toISOString().split("T")[0]); // yyyy-mm-dd
         }
     };
+
+    const calculateAge = (birthDate: Date): number => {
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+        }
+        return age;
+    };
+
+    // Calculate min and max dates for date picker
+    const getMaxDate = () => {
+        const date = new Date();
+        date.setFullYear(date.getFullYear() - 18);
+        return date;
+    };
+
+    const getMinDate = () => {
+        const date = new Date();
+        date.setFullYear(date.getFullYear() - 100);
+        return date;
+    };
+
+    // --- Real-time Username Validation ---
+    useEffect(() => {
+        if (usernameTimeoutRef.current) {
+            clearTimeout(usernameTimeoutRef.current);
+        }
+
+        if (username.length < 3) {
+            setUsernameStatus('none');
+            setUsernameMessage('');
+            return;
+        }
+
+        // Validate format: must start with letter, then letters/numbers
+        const usernameRegex = /^[a-zA-Z][a-zA-Z0-9]*$/;
+        if (!usernameRegex.test(username)) {
+            setUsernameStatus('none');
+            setUsernameMessage('Username must start with a letter, followed by letters or numbers');
+            return;
+        }
+
+        setUsernameStatus('checking');
+        setUsernameMessage('Checking availability...');
+
+        usernameTimeoutRef.current = setTimeout(async () => {
+            try {
+                const result = await checkUsernameAvailability(username);
+                if (result.available) {
+                    setUsernameStatus('available');
+                    setUsernameMessage('Username is available');
+                } else {
+                    setUsernameStatus('taken');
+                    setUsernameMessage('Username is already taken');
+                }
+            } catch (error) {
+                setUsernameStatus('none');
+                setUsernameMessage('');
+            }
+        }, 500); // 500ms debounce
+
+        return () => {
+            if (usernameTimeoutRef.current) {
+                clearTimeout(usernameTimeoutRef.current);
+            }
+        };
+    }, [username]);
+
+    // --- Real-time Phone Validation ---
+    useEffect(() => {
+        if (phoneTimeoutRef.current) {
+            clearTimeout(phoneTimeoutRef.current);
+        }
+
+        if (phone.length !== 11) {
+            setPhoneStatus('none');
+            setPhoneMessage(phone.length > 0 && phone.length < 11 ? 'Phone must be 11 digits' : '');
+            return;
+        }
+
+        setPhoneStatus('checking');
+        setPhoneMessage('Checking availability...');
+
+        phoneTimeoutRef.current = setTimeout(async () => {
+            try {
+                const result = await checkPhoneAvailability(phone);
+                if (result.available) {
+                    setPhoneStatus('available');
+                    setPhoneMessage('Phone number is available');   
+                } else {
+                    setPhoneStatus('taken');
+                    setPhoneMessage('Phone number is already registered');
+                }
+            } catch (error) {
+                setPhoneStatus('none');
+                setPhoneMessage('');
+            }
+        }, 500); // 500ms debounce
+
+        return () => {
+            if (phoneTimeoutRef.current) {
+                clearTimeout(phoneTimeoutRef.current);
+            }
+        };
+    }, [phone]);
 
     // --- Validation ---
     const validateRequiredFields = () => {
@@ -75,6 +265,58 @@ export default function ProfileScreen() {
                 return false;
             }
         }
+
+        // Check username availability
+        if (usernameStatus === 'taken') {
+            Alert.alert('Username Taken', 'Please choose a different username.');
+            return false;
+        }
+        if (usernameStatus === 'checking') {
+            Alert.alert('Please Wait', 'Still checking username availability...');
+            return false;
+        }
+        if (username.length < 6) {
+            Alert.alert('Invalid Username', 'Username must be at least 6 characters.');
+            return false;
+        }
+        // Validate username format
+        const usernameRegex = /^[a-zA-Z][a-zA-Z0-9]*$/;
+        if (!usernameRegex.test(username)) {
+            Alert.alert('Invalid Username Format', 'Username must start with a letter, followed by letters or numbers only.');
+            return false;
+        }
+        if (usernameStatus !== 'available') {
+            Alert.alert('Username Not Verified', 'Please wait for username availability check.');
+            return false;
+        }
+
+        // Check phone availability
+        if (phoneStatus === 'taken') {
+            Alert.alert('Phone Taken', 'This phone number is already registered.');
+            return false;
+        }
+        if (phoneStatus === 'checking') {
+            Alert.alert('Please Wait', 'Still checking phone number availability...');
+            return false;
+        }
+        if (phone.length !== 11) {
+            Alert.alert('Invalid Phone', 'Phone number must be exactly 11 digits.');
+            return false;
+        }
+        if (phoneStatus !== 'available') {
+            Alert.alert('Phone Not Verified', 'Please wait for phone number availability check.');
+            return false;
+        }
+
+        // Check age
+        if (dob) {
+            const age = calculateAge(new Date(dob));
+            if (age < 18 || age > 100) {
+                Alert.alert('Invalid Age', 'Age must be between 18 and 100 years.');
+                return false;
+            }
+        }
+
         return true;
     };
 
@@ -82,8 +324,21 @@ export default function ProfileScreen() {
     const handleNext = () => {
         if (!validateRequiredFields()) return;
 
-        // Pass data if needed using params, context, or store
-        router.push("/provider/onboarding/LocationScreen"); // ✅ goes to LocationScreen
+        // Pass all data to LocationScreen
+        router.push({
+            pathname: "/provider/onboarding/LocationScreen",
+            params: {
+                email: paramEmail,
+                otp,
+                photo,
+                firstName,
+                middleName,
+                lastName,
+                dob,
+                phone,
+                username
+            }
+        });
     };
 
     return (
@@ -93,8 +348,27 @@ export default function ProfileScreen() {
         >
             <View style={styles.container}>
                 <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled">
-                    {/* Back Button */}
-                    <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                    {/* Back Button - Preserve data when going back */}
+                    <TouchableOpacity 
+                        onPress={() => {
+                            router.push({
+                                pathname: '/provider/onboarding/agreement',
+                                params: {
+                                    email: paramEmail,
+                                    otp,
+                                    // Save current form data
+                                    ...(photo && { photo }),
+                                    ...(firstName && { firstName }),
+                                    ...(middleName && { middleName }),
+                                    ...(lastName && { lastName }),
+                                    ...(dob && { dob }),
+                                    ...(phone && { phone }),
+                                    ...(username && { username }),
+                                }
+                            });
+                        }} 
+                        style={styles.backButton}
+                    >
                         <Ionicons name="arrow-back" size={30} color="#008080"/>
                     </TouchableOpacity>
 
@@ -104,7 +378,7 @@ export default function ProfileScreen() {
                     </Text>
 
                     {/* Profile Photo */}
-                    <TouchableOpacity onPress={openCamera} style={styles.photoContainer}>
+                    <TouchableOpacity onPress={selectPhotoOption} style={styles.photoContainer}>
                         {photo ? (
                             <Image source={{uri: photo}} style={styles.photo}/>
                         ) : (
@@ -148,35 +422,112 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                     {showDatePicker && (
                         <DateTimePicker
-                            value={dob ? new Date(dob) : new Date()}
+                            value={dob ? new Date(dob) : getMaxDate()}
                             mode="date"
                             display="default"
                             onChange={handleDateChange}
-                            maximumDate={new Date()}
+                            maximumDate={getMaxDate()}
+                            minimumDate={getMinDate()}
                         />
                     )}
 
                     <Text style={styles.sectionTitle}>Contact Information</Text>
 
-                    {/* Contact Info */}
-                    {[
-                        {label: "Email", value: email, setter: setEmail, keyboardType: "email-address"},
-                        {label: "Username", value: username, setter: setUsername, keyboardType: "default"},
-                        {label: "Phone Number", value: phone, setter: setPhone, keyboardType: "phone-pad"},
-                    ].map(({label, value, setter, keyboardType}) => (
-                        <View key={label}>
-                            <View style={styles.labelRow}>
-                                <Text style={styles.labelText}>{label}</Text>
-                                <Text style={styles.requiredAsterisk}>*</Text>
-                            </View>
-                            <TextInput
-                                style={styles.input}
-                                value={value}
-                                onChangeText={setter}
-                                keyboardType={keyboardType as any}
-                            />
+                    {/* Email (Disabled) */}
+                    <View>
+                        <View style={styles.labelRow}>
+                            <Text style={styles.labelText}>Email</Text>
+                            <Text style={styles.requiredAsterisk}>*</Text>
                         </View>
-                    ))}
+                        <TextInput
+                            style={[styles.input, styles.disabledInput]}
+                            value={email}
+                            editable={false}
+                            keyboardType="email-address"
+                        />
+                    </View>
+
+                    {/* Username with validation */}
+                    <View>
+                        <View style={styles.labelRow}>
+                            <Text style={styles.labelText}>Username</Text>
+                            <Text style={styles.requiredAsterisk}>*</Text>
+                            {usernameStatus === 'checking' && (
+                                <ActivityIndicator size="small" color="#008080" style={{marginLeft: 8}} />
+                            )}
+                            {usernameStatus === 'available' && (
+                                <Ionicons name="checkmark-circle" size={20} color="#4CAF50" style={{marginLeft: 8}} />
+                            )}
+                            {usernameStatus === 'taken' && (
+                                <Ionicons name="close-circle" size={20} color="#F44336" style={{marginLeft: 8}} />
+                            )}
+                        </View>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                usernameStatus === 'available' && styles.inputValid,
+                                usernameStatus === 'taken' && styles.inputInvalid,
+                                usernameMessage && usernameStatus === 'none' && styles.inputInvalid,
+                            ]}
+                            value={username}
+                            onChangeText={setUsername}
+                            placeholder="e.g. john123"
+                            autoCapitalize="none"
+                        />
+                        {usernameMessage ? (
+                            <Text style={[
+                                styles.validationMessage,
+                                usernameStatus === 'available' && styles.validMessage,
+                                (usernameStatus === 'taken' || (usernameStatus === 'none' && usernameMessage)) && styles.invalidMessage,
+                            ]}>
+                                {usernameMessage}
+                            </Text>
+                        ) : null}
+                    </View>
+
+                    {/* Phone Number with validation */}
+                    <View>
+                        <View style={styles.labelRow}>
+                            <Text style={styles.labelText}>Phone Number</Text>
+                            <Text style={styles.requiredAsterisk}>*</Text>
+                            {phoneStatus === 'checking' && (
+                                <ActivityIndicator size="small" color="#008080" style={{marginLeft: 8}} />
+                            )}
+                            {phoneStatus === 'available' && (
+                                <Ionicons name="checkmark-circle" size={20} color="#4CAF50" style={{marginLeft: 8}} />
+                            )}
+                            {phoneStatus === 'taken' && (
+                                <Ionicons name="close-circle" size={20} color="#F44336" style={{marginLeft: 8}} />
+                            )}
+                        </View>
+                        <TextInput
+                            style={[
+                                styles.input,
+                                phoneStatus === 'available' && styles.inputValid,
+                                phoneStatus === 'taken' && styles.inputInvalid,
+                            ]}
+                            value={phone}
+                            onChangeText={(text) => {
+                                // Limit to 11 digits
+                                const numericText = text.replace(/[^0-9]/g, '');
+                                if (numericText.length <= 11) {
+                                    setPhone(numericText);
+                                }
+                            }}
+                            keyboardType="phone-pad"
+                            placeholder="11-digit phone number"
+                            maxLength={11}
+                        />
+                        {phoneMessage ? (
+                            <Text style={[
+                                styles.validationMessage,
+                                phoneStatus === 'available' && styles.validMessage,
+                                phoneStatus === 'taken' && styles.invalidMessage,
+                            ]}>
+                                {phoneMessage}
+                            </Text>
+                        ) : null}
+                    </View>
 
                     {/* Next Button */}
                     <View style={styles.fixedButtonContainer}>
@@ -217,6 +568,32 @@ const styles = StyleSheet.create({
         backgroundColor: "#f9f9f9",
         marginHorizontal: 20,
         borderRadius: 30,
+    },
+    disabledInput: {
+        backgroundColor: "#e0e0e0",
+        color: "#666",
+    },
+    inputValid: {
+        borderWidth: 2,
+        borderColor: "#4CAF50",
+        backgroundColor: "#E8F5E9",
+    },
+    inputInvalid: {
+        borderWidth: 2,
+        borderColor: "#F44336",
+        backgroundColor: "#FFEBEE",
+    },
+    validationMessage: {
+        fontSize: 12,
+        marginTop: -8,
+        marginBottom: 8,
+        paddingHorizontal: 20,
+    },
+    validMessage: {
+        color: "#4CAF50",
+    },
+    invalidMessage: {
+        color: "#F44336",
     },
     dateInput: {
         flexDirection: "row",

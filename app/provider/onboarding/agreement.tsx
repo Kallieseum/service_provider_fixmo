@@ -1,19 +1,45 @@
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
     Image,
-    TouchableOpacity,
     SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import {useRouter} from 'expo-router';
 
 export default function AgreementScreen() {
     const router = useRouter();
+    const params = useLocalSearchParams<{ 
+        email: string; 
+        otp: string;
+        // Optional fields if navigating back from basicinfo
+        photo?: string;
+        firstName?: string;
+        middleName?: string;
+        lastName?: string;
+        dob?: string;
+        phone?: string;
+        username?: string;
+    }>();
 
     const handleAgree = () => {
-        router.push('/provider/onboarding/basicinfo');
+        router.push({
+            pathname: '/provider/onboarding/basicinfo',
+            params: { 
+                email: params.email, 
+                otp: params.otp,
+                // Preserve any existing data
+                ...(params.photo && { photo: params.photo }),
+                ...(params.firstName && { firstName: params.firstName }),
+                ...(params.middleName && { middleName: params.middleName }),
+                ...(params.lastName && { lastName: params.lastName }),
+                ...(params.dob && { dob: params.dob }),
+                ...(params.phone && { phone: params.phone }),
+                ...(params.username && { username: params.username }),
+            }
+        });
     };
 
     return (

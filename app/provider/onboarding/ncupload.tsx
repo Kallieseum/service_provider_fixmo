@@ -1,20 +1,19 @@
-import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    ScrollView,
-    TextInput,
-    Modal,
-    Alert,
-    Platform,
-} from "react-native";
-import {useRouter} from "expo-router";
-import * as DocumentPicker from "expo-document-picker";
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import {Picker} from "@react-native-picker/picker";
-import {useState} from "react";
-import {Ionicons} from "@expo/vector-icons";
+import { Picker } from "@react-native-picker/picker";
+import * as DocumentPicker from "expo-document-picker";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useState } from "react";
+import {
+    Alert,
+    Modal,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from "react-native";
 import certificateServicesJson from "../../assets/data/certificateservices.json";
 
 // ---------- Types ----------
@@ -27,8 +26,16 @@ type CertificateServicesJSON = {
     categories: CertificateService[];
 };
 
-type Certificate = {
-    type: string;
+// Using arrays for API compatibility
+type CertificateData = {
+    certificateNames: string[];
+    certificateNumbers: string[];
+    expiryDates: string[];
+    certificateFiles: string[];
+};
+
+type CertificateEntry = {
+    name: string;
     number: string;
     expiry: Date | null;
     file: string | null;
@@ -39,19 +46,34 @@ const certificateServices: CertificateServicesJSON = certificateServicesJson;
 
 export default function RequirementsUpload() {
     const router = useRouter();
+    const params = useLocalSearchParams();
 
-    // Professional Info
-    const [uliNumber, setUliNumber] = useState("");
+    // Professional Info - Initialize from params if navigating back
+    const [uliNumber, setUliNumber] = useState((params.savedUliNumber as string) || "");
     const [showTooltip, setShowTooltip] = useState(false);
 
-    // Security
-    const [password, setPassword] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
+    // Professions and Experiences - Initialize from params
+    const [professions, setProfessions] = useState<string[]>(
+        params.savedProfessions 
+            ? JSON.parse(params.savedProfessions as string)
+            : [""]
+    );
+    const [experiences, setExperiences] = useState<string[]>(
+        params.savedExperiences 
+            ? JSON.parse(params.savedExperiences as string)
+            : [""]
+    );
 
-    // TESDA Certificates
-    const [certificates, setCertificates] = useState<Certificate[]>([
-        {type: "", number: "", expiry: null, file: null},
-    ]);
+    // Security - Initialize from params if navigating back
+    const [password, setPassword] = useState((params.savedPassword as string) || "");
+    const [confirmPassword, setConfirmPassword] = useState((params.savedConfirmPassword as string) || "");
+
+    // TESDA Certificates - Initialize from params if navigating back
+    const [certificates, setCertificates] = useState<CertificateEntry[]>(
+        params.savedCertificates 
+            ? JSON.parse(params.savedCertificates as string)
+            : [{name: "", number: "", expiry: null, file: null}]
+    );
 
     const [showDatePicker, setShowDatePicker] = useState<number | null>(null);
 
@@ -59,8 +81,32 @@ export default function RequirementsUpload() {
     const addCertificate = () => {
         setCertificates([
             ...certificates,
-            {type: "", number: "", expiry: null, file: null},
+            {name: "", number: "", expiry: null, file: null},
         ]);
+    };
+
+    // Add profession field
+    const addProfession = () => {
+        setProfessions([...professions, ""]);
+    };
+
+    // Remove profession field
+    const removeProfession = (index: number) => {
+        if (professions.length > 1) {
+            setProfessions(professions.filter((_, i) => i !== index));
+        }
+    };
+
+    // Add experience field
+    const addExperience = () => {
+        setExperiences([...experiences, ""]);
+    };
+
+    // Remove experience field
+    const removeExperience = (index: number) => {
+        if (experiences.length > 1) {
+            setExperiences(experiences.filter((_, i) => i !== index));
+        }
     };
 
     const isPasswordValid = (password: string) => {
@@ -70,13 +116,34 @@ export default function RequirementsUpload() {
     };
 
     const handleNext = () => {
+        // Validate ULI is 12 digits
+        if (uliNumber.length !== 12) {
+            Alert.alert(
+                "Invalid ULI",
+                "ULI must be exactly 12 digits."
+            );
+            return;
+        }
+
+        // Validate certificate numbers are 14 digits
+        const invalidCertNumbers = certificates.filter(cert => cert.number && cert.number.length !== 14);
+        if (invalidCertNumbers.length > 0) {
+            Alert.alert(
+                "Invalid Certificate Number",
+                "All certificate numbers must be exactly 14 digits."
+            );
+            return;
+        }
+
         if (
             !uliNumber ||
             !password ||
             !confirmPassword ||
+            professions.some(p => !p.trim()) ||
+            experiences.some(e => !e.trim()) ||
             certificates.some(
                 (cert) =>
-                    !cert.type || !cert.number || !cert.expiry || !cert.file
+                    !cert.name || !cert.number || !cert.expiry || !cert.file
             )
         ) {
             Alert.alert(
@@ -99,7 +166,36 @@ export default function RequirementsUpload() {
             return;
         }
 
-        router.push("/provider/onboarding/drugtestupload");
+        // Convert certificates to arrays for API
+        const certificateNames = certificates.map(c => c.name);
+        const certificateNumbers = certificates.map(c => c.number);
+        const expiryDates = certificates.map(c => 
+            c.expiry ? c.expiry.toISOString().split('T')[0] : ''
+        );
+        const certificateFiles = certificates.map(c => c.file || '');
+
+        router.push({
+            pathname: "/provider/onboarding/applicationreview",
+            params: {
+                ...params,
+                password,
+                uliNumber,
+                // Pass as comma-separated strings, not JSON arrays
+                professions: professions.filter(p => p.trim()).join(','),
+                experiences: experiences.filter(e => e.trim()).join(','),
+                certificateNames: certificateNames.join(','),
+                certificateNumbers: certificateNumbers.join(','),
+                expiryDates: expiryDates.join(','),
+                certificateFiles: certificateFiles.join(','),
+                // Keep for back navigation
+                savedCertificates: JSON.stringify(certificates),
+                savedProfessions: JSON.stringify(professions),
+                savedExperiences: JSON.stringify(experiences),
+                savedUliNumber: uliNumber,
+                savedPassword: password,
+                savedConfirmPassword: confirmPassword,
+            }
+        });
     };
 
     return (
@@ -109,7 +205,7 @@ export default function RequirementsUpload() {
                     {/* Professional Info */}
                     <Text style={styles.sectionHeader}>Professional Information</Text>
                     <View style={styles.section}>
-                        <Text style={styles.title}>Unique Learner Identifier</Text>
+                        <Text style={styles.title}>Unique Learner Identifier (12 digits)</Text>
                         <View style={styles.uliRow}>
                             <TextInput
                                 style={styles.input}
@@ -117,7 +213,11 @@ export default function RequirementsUpload() {
                                 keyboardType="numeric"
                                 maxLength={12}
                                 value={uliNumber}
-                                onChangeText={setUliNumber}
+                                onChangeText={(val) => {
+                                    // Only allow numbers
+                                    const numericText = val.replace(/[^0-9]/g, '');
+                                    setUliNumber(numericText);
+                                }}
                             />
                             <TouchableOpacity onPress={() => setShowTooltip(true)}>
                                 <Ionicons
@@ -127,6 +227,96 @@ export default function RequirementsUpload() {
                                 />
                             </TouchableOpacity>
                         </View>
+                    </View>
+
+                    {/* Professions */}
+                    <Text style={styles.sectionHeader}>Professions</Text>
+                    <View style={styles.section}>
+                        {professions.map((profession, index) => (
+                            <View key={index} style={{marginBottom: 10}}>
+                                <View style={styles.fieldRow}>
+                                    <TextInput
+                                        style={[styles.input, {flex: 1}]}
+                                        placeholder="e.g. Electrician, Plumber"
+                                        value={profession}
+                                        onChangeText={(val) => {
+                                            const updated = [...professions];
+                                            updated[index] = val;
+                                            setProfessions(updated);
+                                        }}
+                                    />
+                                    {professions.length > 1 && (
+                                        <TouchableOpacity
+                                            onPress={() => removeProfession(index)}
+                                            style={{padding: 5}}
+                                        >
+                                            <Ionicons name="close-circle" size={24} color="#ff4444" />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+                        ))}
+                        <TouchableOpacity 
+                            onPress={addProfession} 
+                            style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                padding: 12,
+                                backgroundColor: "#e0f7f4",
+                                borderRadius: 8,
+                                marginTop: 10,
+                                gap: 8,
+                            }}
+                        >
+                            <Ionicons name="add-circle-outline" size={20} color="#008080" />
+                            <Text style={{color: "#008080", fontSize: 14, fontWeight: "600"}}>Add Another Profession</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Experiences */}
+                    <Text style={styles.sectionHeader}>Years of Experience</Text>
+                    <View style={styles.section}>
+                        {experiences.map((experience, index) => (
+                            <View key={index} style={{marginBottom: 10}}>
+                                <View style={styles.fieldRow}>
+                                    <TextInput
+                                        style={[styles.input, {flex: 1}]}
+                                        placeholder="e.g. 5 years in electrical work"
+                                        value={experience}
+                                        onChangeText={(val) => {
+                                            const updated = [...experiences];
+                                            updated[index] = val;
+                                            setExperiences(updated);
+                                        }}
+                                    />
+                                    {experiences.length > 1 && (
+                                        <TouchableOpacity
+                                            onPress={() => removeExperience(index)}
+                                            style={{padding: 5}}
+                                        >
+                                            <Ionicons name="close-circle" size={24} color="#ff4444" />
+                                        </TouchableOpacity>
+                                    )}
+                                </View>
+                            </View>
+                        ))}
+                        <TouchableOpacity 
+                            onPress={addExperience} 
+                            style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                padding: 12,
+                                backgroundColor: "#e0f7f4",
+                                borderRadius: 8,
+                                marginTop: 10,
+                                gap: 8,
+                            }}
+                        >
+                            <Ionicons name="add-circle-outline" size={20} color="#008080" />
+                            <Text style={{color: "#008080", fontSize: 14, fontWeight: "600"}}>Add More Experience</Text>
+                        </TouchableOpacity>
                     </View>
 
                     {/* Security */}
@@ -162,10 +352,10 @@ export default function RequirementsUpload() {
                             <Text style={styles.title}>Certificate Type</Text>
                             <View style={styles.pickerWrapper}>
                                 <Picker
-                                    selectedValue={cert.type}
+                                    selectedValue={cert.name}
                                     onValueChange={(val) => {
                                         const updated = [...certificates];
-                                        updated[index].type = val;
+                                        updated[index].name = val;
                                         setCertificates(updated);
                                     }}
                                 >
@@ -183,17 +373,26 @@ export default function RequirementsUpload() {
                             </View>
 
                             {/* Certificate Number */}
-                            <Text style={styles.title}>Certificate Number</Text>
+                            <Text style={styles.title}>Certificate Number (14 digits)</Text>
                             <TextInput
                                 style={styles.input}
-                                placeholder="Enter certificate number"
+                                placeholder="Enter 14-digit certificate number"
+                                keyboardType="numeric"
+                                maxLength={14}
                                 value={cert.number}
                                 onChangeText={(val) => {
+                                    // Only allow numbers
+                                    const numericText = val.replace(/[^0-9]/g, '');
                                     const updated = [...certificates];
-                                    updated[index].number = val;
+                                    updated[index].number = numericText;
                                     setCertificates(updated);
                                 }}
                             />
+                            {cert.number && cert.number.length < 14 && (
+                                <Text style={{color: '#F44336', fontSize: 12, marginTop: -8, marginBottom: 8}}>
+                                    Certificate number must be 14 digits ({cert.number.length}/14)
+                                </Text>
+                            )}
 
                             {/* Expiry Date */}
                             <Text style={styles.title}>Expiry Date</Text>
@@ -397,6 +596,11 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     addButtonText: {color: "#008080", fontWeight: "bold", fontSize: 14},
+    fieldRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+    },
     removeButton: {
         flexDirection: "row",
         alignItems: "center",

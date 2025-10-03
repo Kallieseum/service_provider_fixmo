@@ -1,18 +1,17 @@
-import React, {useState} from "react";
+import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
-    View,
+    Alert,
+    Image,
+    Platform,
+    ScrollView,
+    StyleSheet,
     Text,
     TextInput,
-    TouchableOpacity,
-    StyleSheet,
-    ScrollView,
-    Image,
-    Alert,
-    Platform,
+    TouchableOpacity
 } from "react-native";
-import {Ionicons} from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
-import {useRouter} from "expo-router";
 
 export default function EditProfileScreen() {
     const router = useRouter();
@@ -33,7 +32,6 @@ export default function EditProfileScreen() {
         }
 
         const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 1,
         });
 

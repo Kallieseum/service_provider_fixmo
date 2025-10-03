@@ -1,30 +1,61 @@
-import React, {useState} from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
 import {
-    View,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    StyleSheet,
+    ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import {useRouter} from 'expo-router';
-import {Ionicons} from '@expo/vector-icons';
+import { requestProviderOTP } from '../../../src/api/auth.api';
 
 export default function EmailScreen() {
     const router = useRouter();
     const [email, setEmail] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const handleNext = () => {
+    const handleNext = async () => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (emailRegex.test(email)) {
-            router.push({
-                pathname: '/provider/onboarding/otp',
-                params: {email},
-            });
-        } else {
-            alert('Please enter a valid email address');
+        
+        if (!emailRegex.test(email)) {
+            Alert.alert('Invalid Email', 'Please enter a valid email address');
+            return;
+        }
+
+        setLoading(true);
+
+        try {
+            // Request OTP from backend
+            const response = await requestProviderOTP(email);
+            
+            Alert.alert(
+                'Success', 
+                'OTP has been sent to your email. Please check your inbox.',
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => {
+                            router.push({
+                                pathname: '/provider/onboarding/otp',
+                                params: {email},
+                            });
+                        }
+                    }
+                ]
+            );
+        } catch (error: any) {
+            Alert.alert(
+                'Error', 
+                error.message || 'Failed to send OTP. Please try again.'
+            );
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -55,8 +86,16 @@ export default function EmailScreen() {
                 </View>
 
                 <View style={styles.footer}>
-                    <TouchableOpacity style={styles.button} onPress={handleNext}>
-                        <Text style={styles.buttonText}>Next</Text>
+                    <TouchableOpacity 
+                        style={[styles.button, loading && styles.buttonDisabled]} 
+                        onPress={handleNext}
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={styles.buttonText}>Next</Text>
+                        )}
                     </TouchableOpacity>
                 </View>
             </SafeAreaView>
@@ -115,6 +154,9 @@ const styles = StyleSheet.create({
         paddingVertical: 14,
         borderRadius: 30,
         alignItems: 'center',
+    },
+    buttonDisabled: {
+        opacity: 0.6,
     },
     buttonText: {
         color: '#fff',

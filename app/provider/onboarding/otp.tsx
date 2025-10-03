@@ -1,22 +1,26 @@
-import React, {useState, useEffect} from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
+    ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
     SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import {useRouter, useLocalSearchParams} from 'expo-router';
 import {
     CodeField,
     Cursor,
     useBlurOnFulfill,
     useClearByFocusCell,
 } from 'react-native-confirmation-code-field';
+import { requestProviderOTP, verifyProviderOTP } from '../../../src/api/auth.api';
+import { OTP_CONFIG } from '../../../src/constants/config';
 
-const CELL_COUNT = 6;
+const CELL_COUNT = OTP_CONFIG.LENGTH;
 
 export default function OTPScreen() {
     const router = useRouter();
@@ -24,8 +28,20 @@ export default function OTPScreen() {
     const [value, setValue] = useState('');
     const ref = useBlurOnFulfill({value, cellCount: CELL_COUNT});
     const [props, getCellOnLayoutHandler] = useClearByFocusCell({value, setValue});
-    const [timer, setTimer] = useState(40);
+    const [timer, setTimer] = useState(OTP_CONFIG.RESEND_COOLDOWN_SECONDS);
     const [isResendVisible, setIsResendVisible] = useState(false);
+    const [isVerifying, setIsVerifying] = useState(false);
+    const [resending, setResending] = useState(false);
+    const [validationStatus, setValidationStatus] = useState<'none' | 'valid' | 'invalid'>('none');
+    const [errorMessage, setErrorMessage] = useState('');
+
+    // Prevent back navigation
+    useFocusEffect(
+        React.useCallback(() => {
+            // Prevent going back to email screen
+            return () => {};
+        }, [])
+    );
 
     useEffect(() => {
         if (timer > 0) {
@@ -44,17 +60,68 @@ export default function OTPScreen() {
 
     useEffect(() => {
         if (value.length === CELL_COUNT) {
-            // ✅ Replace with actual verification logic
-            alert(`Email ${email} verified successfully!`);
-            router.push('/provider/onboarding/agreement');
+            handleVerifyOTP();
         }
     }, [value]);
 
-    const handleResend = () => {
-        // ✅ Replace this with actual resend email logic
-        alert(`OTP resent to ${email}!`);
-        setTimer(40); // reset countdown
-        setIsResendVisible(false);
+    const handleVerifyOTP = async () => {
+        if (isVerifying) return;
+        
+        setIsVerifying(true);
+        setErrorMessage('');
+        
+        try {
+            // Call API to verify OTP
+            const result = await verifyProviderOTP(email || '', value);
+            
+            if (result.valid) {
+                // Show green cells
+                setValidationStatus('valid');
+                
+                // Wait a bit to show the green feedback
+                setTimeout(() => {
+                    // OTP verified successfully, proceed to agreement
+                    router.replace({
+                        pathname: '/provider/onboarding/agreement',
+                        params: { 
+                            email: email || '',
+                            otp: value 
+                        },
+                    });
+                }, 500);
+            }
+        } catch (error: any) {
+            // Show red cells and error message
+            setValidationStatus('invalid');
+            setErrorMessage(error.message || 'Invalid OTP. Please try again.');
+            
+            // Clear after showing error
+            setTimeout(() => {
+                setValue('');
+                setValidationStatus('none');
+                setErrorMessage('');
+            }, 1500);
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+
+    const handleResend = async () => {
+        if (resending) return;
+        
+        setResending(true);
+        
+        try {
+            await requestProviderOTP(email || '');
+            Alert.alert('Success', `OTP resent to ${email}!`);
+            setTimer(OTP_CONFIG.RESEND_COOLDOWN_SECONDS);
+            setIsResendVisible(false);
+            setValue(''); // Clear the OTP input
+        } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to resend OTP. Please try again.');
+        } finally {
+            setResending(false);
+        }
     };
 
     return (
@@ -73,21 +140,39 @@ export default function OTPScreen() {
                         ref={ref}
                         {...props}
                         value={value}
-                        onChangeText={setValue}
+                        onChangeText={(text) => {
+                            setValue(text);
+                            setValidationStatus('none');
+                            setErrorMessage('');
+                        }}
                         cellCount={CELL_COUNT}
                         rootStyle={styles.codeFieldRoot}
                         keyboardType="number-pad"
                         textContentType="oneTimeCode"
+                        editable={!isVerifying && validationStatus === 'none'}
                         renderCell={({index, symbol, isFocused}) => (
                             <Text
                                 key={index}
-                                style={[styles.cell, isFocused && styles.focusCell]}
+                                style={[
+                                    styles.cell,
+                                    isFocused && validationStatus === 'none' && styles.focusCell,
+                                    validationStatus === 'valid' && styles.validCell,
+                                    validationStatus === 'invalid' && styles.invalidCell,
+                                ]}
                                 onLayout={getCellOnLayoutHandler(index)}
                             >
                                 {symbol || (isFocused ? <Cursor/> : null)}
                             </Text>
                         )}
                     />
+
+                    {errorMessage ? (
+                        <Text style={styles.errorText}>{errorMessage}</Text>
+                    ) : null}
+
+                    {isVerifying && (
+                        <ActivityIndicator size="small" color="#008080" style={styles.loader} />
+                    )}
 
                     {isResendVisible ? (
                         <TouchableOpacity onPress={handleResend}>
@@ -153,6 +238,26 @@ const styles = StyleSheet.create({
     },
     focusCell: {
         borderColor: '#008080',
+    },
+    validCell: {
+        borderColor: '#4CAF50',
+        borderWidth: 2,
+        backgroundColor: '#E8F5E9',
+    },
+    invalidCell: {
+        borderColor: '#F44336',
+        borderWidth: 2,
+        backgroundColor: '#FFEBEE',
+    },
+    errorText: {
+        color: '#F44336',
+        fontSize: 14,
+        textAlign: 'center',
+        marginTop: 10,
+        fontWeight: '500',
+    },
+    loader: {
+        marginTop: 10,
     },
     resend: {
         marginTop: 20,
