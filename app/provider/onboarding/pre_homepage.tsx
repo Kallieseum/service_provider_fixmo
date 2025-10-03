@@ -1,9 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { format, parseISO } from "date-fns";
 import { useFonts } from "expo-font";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useRef, useState } from "react";
 import {
+    ActivityIndicator,
+    Alert,
     Modal,
     Pressable,
     ScrollView,
@@ -14,7 +18,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { getDetailedProviderProfile, ProviderProfile } from "../../../src/api/auth.api";
+import { getProviderAvailability } from "../../../src/api/availability.api";
+import { getAppointmentsByProviderId } from "../../../src/api/booking.api";
 import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
+import type { Appointment } from "../../../src/types/appointment";
+import type { Availability } from "../../../src/types/availability";
 import OngoingServiceDetails from "../../provider/integration/ongoing-service-details";
 
 // Prevent auto-hide with error handling
@@ -33,7 +42,12 @@ export default function Homepage() {
     const scrollRef = useRef<ScrollView>(null);
     const insets = useSafeAreaInsets();
     const router = useRouter();
+    const params = useLocalSearchParams();
     const [modalVisible, setModalVisible] = useState(false);
+    const [profileLoading, setProfileLoading] = useState(true);
+    const [providerProfile, setProviderProfile] = useState<ProviderProfile | null>(null);
+    const [ongoingAppointment, setOngoingAppointment] = useState<Appointment | null>(null);
+    const [availabilities, setAvailabilities] = useState<Availability[]>([]);
 
     // Load fonts
     const [fontsLoaded] = useFonts({
@@ -41,6 +55,110 @@ export default function Homepage() {
         PoppinsBold: require("../../assets/fonts/Poppins-Bold.ttf"),
         PoppinsSemiBold: require("../../assets/fonts/Poppins-SemiBold.ttf"),
     });
+
+    // Fetch provider profile on mount
+    useEffect(() => {
+        async function fetchProfile() {
+            try {
+                // Get token from AsyncStorage
+                const token = await AsyncStorage.getItem('providerToken');
+                
+                if (!token) {
+                    Alert.alert('Error', 'Session expired. Please login again.');
+                    router.replace('/provider/onboarding/signin');
+                    return;
+                }
+
+                // Fetch detailed profile
+                const profile = await getDetailedProviderProfile(token);
+
+                if (profile) {
+                    setProviderProfile(profile);
+                } else {
+                    throw new Error('Invalid profile data');
+                }
+            } catch (error: any) {
+                console.error('Profile fetch error:', error);
+                Alert.alert(
+                    'Error',
+                    error?.message || 'Failed to load profile. Please try again.',
+                    [
+                        {
+                            text: 'Retry',
+                            onPress: () => fetchProfile(),
+                        },
+                        {
+                            text: 'Logout',
+                            onPress: async () => {
+                                await AsyncStorage.multiRemove(['providerToken', 'providerId', 'providerUserName']);
+                                router.replace('/provider/onboarding/signin');
+                            },
+                        },
+                    ]
+                );
+            } finally {
+                setProfileLoading(false);
+            }
+        }
+
+        if (fontsLoaded) {
+            fetchProfile();
+        }
+    }, [fontsLoaded]);
+
+    // Fetch ongoing appointments
+    useEffect(() => {
+        async function fetchOngoingAppointments() {
+            try {
+                const token = await AsyncStorage.getItem('providerToken');
+                const providerIdStr = await AsyncStorage.getItem('providerId');
+
+                if (!token || !providerIdStr) {
+                    return;
+                }
+
+                const providerId = parseInt(providerIdStr, 10);
+                const appointments = await getAppointmentsByProviderId(providerId, token);
+                
+                // Find first appointment with "confirmed" (on the way), "in-progress", or "ongoing" status
+                const ongoing = appointments.find(
+                    (apt) => apt.appointment_status === "confirmed" || apt.appointment_status === "in-progress" || apt.appointment_status === "ongoing"
+                );
+                
+                setOngoingAppointment(ongoing || null);
+            } catch (error: any) {
+                console.error('Fetch ongoing appointments error:', error);
+            }
+        }
+
+        if (fontsLoaded && !profileLoading) {
+            fetchOngoingAppointments();
+        }
+    }, [fontsLoaded, profileLoading]);
+
+    // Fetch availability
+    useEffect(() => {
+        async function fetchAvailability() {
+            try {
+                const token = await AsyncStorage.getItem('providerToken');
+                const providerIdStr = await AsyncStorage.getItem('providerId');
+
+                if (!token || !providerIdStr) {
+                    return;
+                }
+
+                const providerId = parseInt(providerIdStr, 10);
+                const data = await getProviderAvailability(providerId, token);
+                setAvailabilities(data);
+            } catch (error: any) {
+                console.error('Fetch availability error:', error);
+            }
+        }
+
+        if (fontsLoaded && !profileLoading) {
+            fetchAvailability();
+        }
+    }, [fontsLoaded, profileLoading]);
 
     // Hide splash screen when fonts are loaded
     useEffect(() => {
@@ -56,13 +174,23 @@ export default function Homepage() {
         hideSplash();
     }, [fontsLoaded]);
 
-    if (!fontsLoaded) return null;
+    if (!fontsLoaded || profileLoading) {
+        return (
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                <ActivityIndicator size="large" color="#399d9d" />
+                <Text style={{ marginTop: 10, color: '#555' }}>Loading profile...</Text>
+            </View>
+        );
+    }
 
     // User & approval state
-    const {client, service, datetime, status} = useLocalSearchParams();
-    const isApproved = true;
+    const {client, service, datetime, status} = params;
+    const isApproved = providerProfile?.is_verified || false;
 
-    const formattedName = "Juan Dela Cruz";
+    // Format provider name
+    const formattedName = providerProfile
+        ? (providerProfile.full_name?.trim() || `${providerProfile.first_name ?? ""} ${providerProfile.last_name ?? ""}`.trim() || providerProfile.userName)
+        : "User";
 
     // Greeting
     const greetingText = (() => {
@@ -72,27 +200,28 @@ export default function Homepage() {
         return "Good Evening,";
     })();
 
-    // Appointment
-    const sampleAppointment: ScheduledWork = {
-        status: "ongoing",
-        client: "Maria de la Cruz",
-        service: "Electrical Repair",
-        datetime: "June 23, 2025 | 2:00 PM",
-    };
-
-    const appointment: ScheduledWork | null = client
+    // Use real ongoing appointment if available
+    const appointment = ongoingAppointment 
         ? {
-            status: (status as "ongoing" | "scheduled" | "finished") || "ongoing",
-            client: client as string,
-            service: service as string,
-            datetime: datetime as string,
+            ...ongoingAppointment,
+            // Format for display
+            clientName: ongoingAppointment.customer 
+                ? `${ongoingAppointment.customer.first_name} ${ongoingAppointment.customer.last_name}`.trim()
+                : 'Unknown Client',
+            serviceName: ongoingAppointment.service?.service_title || 'Service',
+            dateTime: format(parseISO(ongoingAppointment.scheduled_date), "MMMM dd, yyyy | h:mm a")
         }
-        : sampleAppointment;
+        : null;
 
     const statusColors: Record<string, string> = {
+        pending: "#FFC107",
+        approved: "#4CAF50",
         scheduled: "#4CAF50",
+        confirmed: "#FF9800",
+        "in-progress": "#F44336",
         ongoing: "#F44336",
         finished: "#9E9E9E",
+        completed: "#9E9E9E",
     };
 
     // Notifications
@@ -140,7 +269,19 @@ export default function Homepage() {
                         <View style={styles.greetingBlock}>
                             <Text style={styles.greeting}>{greetingText}</Text>
                             <Text style={styles.name}>{formattedName}</Text>
+                            {providerProfile?.location && (
+                                <Text style={styles.locationText}>{providerProfile.location}</Text>
+                            )}
+                            {typeof providerProfile?.rating === "number" && (
+                                <View style={styles.ratingRow}>
+                                    <Ionicons name="star" size={14} color="#FFB300" />
+                                    <Text style={styles.ratingText}>
+                                        {providerProfile.rating.toFixed(1)} ({providerProfile.ratings_count || 0} reviews)
+                                    </Text>
+                                </View>
+                            )}
                         </View>
+
                     </View>
 
                     <Pressable
@@ -162,27 +303,65 @@ export default function Homepage() {
                     </Pressable>
                 </View>
 
+                {providerProfile && (
+                    <View style={styles.summaryRow}>
+                        <View style={styles.summaryCard}>
+                            <Ionicons name="construct-outline" size={18} color="#00796B" />
+                            <Text style={styles.summaryValue}>{providerProfile.totals?.professions ?? providerProfile.professions?.length ?? 0}</Text>
+                            <Text style={styles.summaryLabel}>Professions</Text>
+                        </View>
+                        <View style={styles.summaryCard}>
+                            <Ionicons name="ribbon-outline" size={18} color="#00796B" />
+                            <Text style={styles.summaryValue}>{providerProfile.totals?.certificates ?? providerProfile.certificates?.length ?? 0}</Text>
+                            <Text style={styles.summaryLabel}>Certificates</Text>
+                        </View>
+                        <View style={styles.summaryCard}>
+                            <Ionicons name="briefcase-outline" size={18} color="#00796B" />
+                            <Text style={styles.summaryValue}>{providerProfile.totals?.recent_services ?? providerProfile.recent_services?.length ?? 0}</Text>
+                            <Text style={styles.summaryLabel}>Services</Text>
+                        </View>
+                    </View>
+                )}
+
                 {/* FixMo Today */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>FixMo Today</Text>
-                    {isApproved && appointment ? (
+                    {!isApproved ? (
+                        <View style={styles.pendingBox}>
+                            <Ionicons name="hammer-outline" size={40} color="#009688"/>
+                            <Text style={styles.pendingText}>
+                                Your account is currently under review. Once <Text
+                                style={styles.highlight}>approved</Text>, you'll start
+                                receiving bookings here.
+                            </Text>
+                        </View>
+                    ) : appointment ? (
                         <TouchableOpacity onPress={() => setModalVisible(true)}>
                             <View style={styles.appointmentBox}>
                                 <View
-                                    style={[styles.statusTag, {backgroundColor: statusColors[appointment.status] || "#777"}]}>
+                                    style={[styles.statusTag, {backgroundColor: statusColors[appointment.appointment_status] || "#777"}]}>
                                     <Text style={styles.statusText}>
-                                        {appointment.status === "ongoing" ? "On going" : appointment.status}
+                                        {appointment.appointment_status === "in-progress" || appointment.appointment_status === "ongoing"
+                                            ? "Ongoing" 
+                                            : appointment.appointment_status === "confirmed"
+                                            ? "On the Way"
+                                            : appointment.appointment_status === "approved" || appointment.appointment_status === "scheduled"
+                                            ? "Scheduled"
+                                            : appointment.appointment_status === "completed"
+                                            ? "Finished"
+                                            : appointment.appointment_status}
                                     </Text>
                                 </View>
-                                <Text style={styles.clientName}>{appointment.client}</Text>
+                                <Text style={styles.bookingId}>Booking ID# {appointment.appointment_id}</Text>
+                                <Text style={styles.clientName}>{appointment.clientName}</Text>
                                 <Text style={styles.serviceType}>
-                                    Service Type: <Text style={styles.highlightService}>{appointment.service}</Text>
+                                    Service Type: <Text style={styles.highlightService}>{appointment.serviceName}</Text>
                                 </Text>
 
                                 <View style={styles.row}>
                                     <View style={styles.row}>
                                         <Ionicons name="calendar-outline" size={16} color="#00796B"/>
-                                        <Text style={styles.datetime}>{appointment.datetime}</Text>
+                                        <Text style={styles.datetime}>{appointment.dateTime}</Text>
                                     </View>
 
                                     <TouchableOpacity
@@ -191,8 +370,8 @@ export default function Homepage() {
                                             router.push({
                                                 pathname: "/provider/integration/messagescreen",
                                                 params: {
-                                                    clientId: "1",
-                                                    clientName: appointment.client,
+                                                    clientId: appointment.customer_id.toString(),
+                                                    clientName: appointment.clientName,
                                                 },
                                             })
                                         }
@@ -204,11 +383,9 @@ export default function Homepage() {
                         </TouchableOpacity>
                     ) : (
                         <View style={styles.pendingBox}>
-                            <Ionicons name="hammer-outline" size={40} color="#009688"/>
+                            <Ionicons name="calendar-outline" size={40} color="#009688"/>
                             <Text style={styles.pendingText}>
-                                Your account is currently under review. Once <Text
-                                style={styles.highlight}>approved</Text>, you'll start
-                                receiving bookings here.
+                                No ongoing appointments right now. Check the FixMo Today page to see all your scheduled services.
                             </Text>
                         </View>
                     )}
@@ -216,14 +393,67 @@ export default function Homepage() {
 
                 {/* Availability */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Availability</Text>
-                    <View style={styles.pendingBox}>
-                        <Text style={styles.pendingText}>
-                            {isApproved
-                                ? "You can now manage your availability in Calendar."
-                                : "Availability will be enabled once your account is approved."}
-                        </Text>
+                    <View style={styles.sectionHeader}>
+                        <Text style={styles.sectionTitle}>Availability</Text>
+                        <TouchableOpacity onPress={() => router.push('/calendar/availability')}>
+                            <Text style={styles.manageLink}>Manage</Text>
+                        </TouchableOpacity>
                     </View>
+                    {isApproved ? (
+                        availabilities.length > 0 ? (
+                            <View style={styles.availabilityBox}>
+                                <View style={styles.activeDaysRow}>
+                                    {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => {
+                                        const fullDay = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][index];
+                                        const isActive = availabilities.some(
+                                            (av) => av.dayOfWeek === fullDay && av.availability_isActive
+                                        );
+                                        return (
+                                            <View
+                                                key={day}
+                                                style={[
+                                                    styles.dayBadge,
+                                                    isActive && styles.dayBadgeActive,
+                                                ]}
+                                            >
+                                                <Text
+                                                    style={[
+                                                        styles.dayBadgeText,
+                                                        isActive && styles.dayBadgeTextActive,
+                                                    ]}
+                                                >
+                                                    {day}
+                                                </Text>
+                                            </View>
+                                        );
+                                    })}
+                                </View>
+                                <Text style={styles.availabilityNote}>
+                                    <Ionicons name="checkmark-circle" size={14} color="#00796B" />{' '}
+                                    {availabilities.filter((av) => av.availability_isActive).length} days active
+                                </Text>
+                            </View>
+                        ) : (
+                            <View style={styles.pendingBox}>
+                                <Ionicons name="calendar-outline" size={40} color="#009688" />
+                                <Text style={styles.pendingText}>
+                                    Set your weekly availability to start receiving bookings.
+                                </Text>
+                                <TouchableOpacity
+                                    style={styles.setupButton}
+                                    onPress={() => router.push('/calendar/availability')}
+                                >
+                                    <Text style={styles.setupButtonText}>Set Availability</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )
+                    ) : (
+                        <View style={styles.pendingBox}>
+                            <Text style={styles.pendingText}>
+                                Availability will be enabled once your account is approved.
+                            </Text>
+                        </View>
+                    )}
                 </View>
             </ScrollView>
 
@@ -257,9 +487,92 @@ const styles = StyleSheet.create({
     greetingBlock: {flexDirection: "column"},
     greeting: {fontSize: 14, color: "#333", fontFamily: "PoppinsRegular"},
     name: {fontSize: 17, color: "#008080", fontFamily: "PoppinsBold"},
+    locationText: {fontSize: 12, color: "#777", fontFamily: "PoppinsRegular", marginTop: 2},
+    ratingRow: {flexDirection: "row", alignItems: "center", marginTop: 2},
+    ratingText: {fontSize: 12, color: "#555", marginLeft: 4, fontFamily: "PoppinsRegular"},
+    summaryRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        marginHorizontal: 20,
+        marginBottom: 20,
+    },
+    summaryCard: {
+        flex: 1,
+        backgroundColor: "#f7f7f7",
+        borderRadius: 16,
+        paddingVertical: 14,
+        paddingHorizontal: 12,
+        alignItems: "center",
+        shadowColor: "#000",
+        shadowOpacity: 0.05,
+        shadowOffset: {width: 0, height: 2},
+        shadowRadius: 4,
+        elevation: 2,
+        marginHorizontal: 6,
+    },
+    summaryValue: {fontSize: 18, fontFamily: "PoppinsBold", color: "#00796B", marginTop: 6},
+    summaryLabel: {fontSize: 12, fontFamily: "PoppinsRegular", color: "#555", marginTop: 2},
     bellWrapper: {position: "relative"},
     section: {marginHorizontal: 20, marginBottom: 20},
     sectionTitle: {fontSize: 18, marginBottom: 10, fontFamily: "PoppinsRegular"},
+    sectionHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 10,
+    },
+    manageLink: {
+        fontSize: 14,
+        color: "#00796B",
+        fontFamily: "PoppinsSemiBold",
+    },
+    availabilityBox: {
+        backgroundColor: "#f2f2f2",
+        borderRadius: 20,
+        padding: 15,
+    },
+    activeDaysRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        marginBottom: 12,
+    },
+    dayBadge: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: "#E0E0E0",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    dayBadgeActive: {
+        backgroundColor: "#00796B",
+    },
+    dayBadgeText: {
+        fontSize: 11,
+        fontFamily: "PoppinsSemiBold",
+        color: "#999",
+    },
+    dayBadgeTextActive: {
+        color: "#fff",
+    },
+    availabilityNote: {
+        fontSize: 13,
+        fontFamily: "PoppinsRegular",
+        color: "#00796B",
+        textAlign: "center",
+    },
+    setupButton: {
+        backgroundColor: "#00796B",
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        marginTop: 12,
+    },
+    setupButtonText: {
+        color: "#fff",
+        fontSize: 14,
+        fontFamily: "PoppinsSemiBold",
+    },
     pendingBox: {backgroundColor: "#f2f2f2", borderRadius: 30, padding: 15, alignItems: "center"},
     pendingText: {fontSize: 14, color: "#555", textAlign: "center", fontFamily: "PoppinsRegular"},
     highlight: {color: "#009688", fontFamily: "PoppinsBold"},
@@ -267,6 +580,7 @@ const styles = StyleSheet.create({
     appointmentBox: {backgroundColor: "#f2f2f2", borderRadius: 20, padding: 15},
     statusTag: {paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginBottom: 8, alignSelf: "flex-start"},
     statusText: {color: "#fff", fontSize: 12, fontFamily: "PoppinsSemiBold"},
+    bookingId: {fontSize: 12, fontFamily: "PoppinsMedium", color: "#666", marginBottom: 4, marginTop: 4},
     clientName: {fontSize: 16, color: "#333", fontFamily: "PoppinsSemiBold"},
     serviceType: {fontSize: 14, color: "#555", marginTop: 4, fontFamily: "PoppinsRegular"},
     datetime: {fontSize: 13, color: "#00796B", marginLeft: 6, fontFamily: "PoppinsRegular"},

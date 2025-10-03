@@ -1,99 +1,282 @@
-import React, {useState} from "react";
+import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { format, parseISO } from "date-fns";
+import { useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-    View,
-    Text,
-    TouchableOpacity,
-    StyleSheet,
+    ActivityIndicator,
+    Alert,
     FlatList,
     LayoutAnimation,
     Platform,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
     UIManager,
+    View,
 } from "react-native";
-import MapView, {Marker} from "react-native-maps";
-import {Ionicons, MaterialIcons} from "@expo/vector-icons";
-import {useRouter} from "expo-router";
+import MapView, { Marker } from "react-native-maps";
+import { completeAppointment, getAppointmentsByProviderId, startEnRoute } from "../../../src/api/booking.api";
+import CompleteServiceModal from "../../../src/components/modals/CompleteServiceModal";
 import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
+import type { Appointment } from "../../../src/types/appointment";
 
 if (Platform.OS === "android") {
     UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 
-const jobs = [
-    {
-        id: "1",
-        client: "Maria de la Cruz",
-        service: "Electrical Repair",
-        datetime: "June 23, 2025 | 2:00PM",
-        location: "999 Pureza, Sta. Mesa",
-        coords: {latitude: 14.5995, longitude: 120.9842},
-        status: "scheduled",
-    },
-    {
-        id: "2",
-        client: "Juan Santos",
-        service: "Plumbing",
-        datetime: "June 25, 2025 | 11:00AM",
-        location: "123 Legarda St., Manila",
-        coords: {latitude: 14.6035, longitude: 120.9875},
-        status: "scheduled",
-    },
-    {
-        id: "3",
-        client: "Ana Lopez",
-        service: "Aircon Cleaning",
-        datetime: "June 20, 2025 | 9:00AM",
-        location: "56 España Blvd., Manila",
-        coords: {latitude: 14.609, longitude: 120.991},
-        status: "finished",
-    },
-    {
-        id: "4",
-        client: "Pedro Cruz",
-        service: "Carpentry",
-        datetime: "June 18, 2025 | 1:30PM",
-        location: "45 Aurora Blvd., Quezon City",
-        coords: {latitude: 14.62, longitude: 121.003},
-        status: "finished",
-    },
-    {
-        id: "5",
-        client: "Liza Dela Peña",
-        service: "Electrical Repair",
-        datetime: "June 19, 2025 | 3:00PM",
-        location: "78 Katipunan Ave., Quezon City",
-        coords: {latitude: 14.639, longitude: 121.074},
-        status: "cancelled",
-    },
-];
-
 const statusColors: Record<string, string> = {
+    pending: "#FFC107",
+    approved: "#4CAF50",
     scheduled: "#4CAF50",
+    confirmed: "#FF9800",
+    "in-progress": "#F44336",
     ongoing: "#F44336",
     finished: "#9E9E9E",
+    completed: "#9E9E9E",
     cancelled: "#E53935",
+    "no-show": "#E53935",
 };
 
 export default function FixMoToday() {
     const [expandedCard, setExpandedCard] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<"scheduled" | "finished" | "cancelled">("scheduled");
+    const [activeTab, setActiveTab] = useState<"scheduled" | "ongoing" | "finished" | "cancelled">("scheduled");
+    const [appointments, setAppointments] = useState<Appointment[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [completeModalVisible, setCompleteModalVisible] = useState(false);
+    const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+    
     const router = useRouter();
-    const isApproved = true; // Use the same approved logic
+    const isApproved = true;
+
+    const fetchAppointments = useCallback(async () => {
+        try {
+            const token = await AsyncStorage.getItem('providerToken');
+            const providerIdStr = await AsyncStorage.getItem('providerId');
+
+            if (!token || !providerIdStr) {
+                Alert.alert('Error', 'Authentication required. Please log in again.');
+                return;
+            }
+
+            const providerId = parseInt(providerIdStr, 10);
+            const data = await getAppointmentsByProviderId(providerId, token);
+            setAppointments(data);
+        } catch (error: any) {
+            console.error('Fetch appointments error:', error);
+            Alert.alert('Error', error.message || 'Failed to load appointments');
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchAppointments();
+    }, [fetchAppointments]);
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchAppointments();
+    };
 
     const toggleCard = (id: string) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setExpandedCard(expandedCard === id ? null : id);
     };
 
-    const handleEnRoute = () => {
-        router.push("/provider/integration/enroutescreen");
+    const handleEnRoute = async (appointment: Appointment) => {
+        Alert.alert(
+            'Start En Route',
+            'Change status to "On the Way" and navigate to route screen?',
+            [
+                {
+                    text: 'Cancel',
+                    style: 'cancel',
+                },
+                {
+                    text: 'Start',
+                    onPress: async () => {
+                        try {
+                            const token = await AsyncStorage.getItem('providerToken');
+                            if (!token) {
+                                Alert.alert('Error', 'Authentication required');
+                                return;
+                            }
+
+                            // Update status to ongoing
+                            await startEnRoute(appointment.appointment_id, token);
+
+                            // Get provider location from AsyncStorage
+                            const providerData = await AsyncStorage.getItem('providerProfile');
+                            let providerLocation = '';
+                            if (providerData) {
+                                try {
+                                    const profile = JSON.parse(providerData);
+                                    providerLocation = profile.provider_exact_location || profile.exact_location || '';
+                                } catch (e) {
+                                    console.error('Error parsing provider profile:', e);
+                                }
+                            }
+
+                            // Navigate to enroute screen with appointment data
+                            router.push({
+                                pathname: "/provider/integration/enroutescreen",
+                                params: {
+                                    appointmentId: appointment.appointment_id.toString(),
+                                    customerId: appointment.customer_id.toString(),
+                                    customerName: getClientName(appointment),
+                                    serviceTitle: getServiceName(appointment),
+                                    scheduledDate: appointment.scheduled_date,
+                                    // Pass exact_location as string in "lat,lng" format
+                                    customerLocation: appointment.customer?.exact_location || `${appointment.customer?.latitude || 14.5995},${appointment.customer?.longitude || 120.9842}`,
+                                    providerLocation: appointment.provider?.provider_exact_location || providerLocation || '',
+                                },
+                            });
+
+                            // Refresh appointments list
+                            fetchAppointments();
+                        } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to start en route');
+                        }
+                    },
+                },
+            ]
+        );
     };
 
-    const handleChat = (clientId: string, clientName: string) => {
+    const handleChat = (customerId: number, clientName: string) => {
         router.push({
             pathname: "/provider/integration/messagescreen",
-            params: {clientId, clientName},
+            params: {clientId: customerId.toString(), clientName},
         });
     };
+
+    const handleCompleteService = (appointment: Appointment) => {
+        setSelectedAppointment(appointment);
+        setCompleteModalVisible(true);
+    };
+
+    const handleCompleteSubmit = async (finalPrice: number, description: string) => {
+        if (!selectedAppointment) return;
+
+        try {
+            const token = await AsyncStorage.getItem('providerToken');
+            if (!token) {
+                Alert.alert('Error', 'Authentication required');
+                return;
+            }
+
+            await completeAppointment(
+                selectedAppointment.appointment_id,
+                finalPrice,
+                description,
+                token
+            );
+
+            Alert.alert('Success', 'Service completed successfully!');
+            fetchAppointments(); // Refresh the list
+        } catch (error: any) {
+            throw error; // Let modal handle the error
+        }
+    };
+
+    const formatDateTime = (dateString: string) => {
+        try {
+            const date = parseISO(dateString);
+            return format(date, "MMM dd, yyyy | h:mm a");
+        } catch {
+            return dateString;
+        }
+    };
+
+    const getClientName = (appointment: Appointment) => {
+        if (appointment.customer) {
+            return `${appointment.customer.first_name} ${appointment.customer.last_name}`;
+        }
+        return `Customer #${appointment.customer_id}`;
+    };
+
+    const getServiceName = (appointment: Appointment) => {
+        return appointment.service?.service_title || 'Service';
+    };
+
+    const getLocation = (appointment: Appointment) => {
+        // Check exact_location first (format: "lat,lng")
+        if (appointment.customer?.exact_location) {
+            const parts = appointment.customer.exact_location.trim().split(',');
+            if (parts.length === 2) {
+                const lat = parseFloat(parts[0]);
+                const lng = parseFloat(parts[1]);
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+                }
+            }
+        }
+        // Fallback to latitude/longitude fields
+        if (appointment.customer?.latitude && appointment.customer?.longitude) {
+            return `${appointment.customer.latitude.toFixed(6)}, ${appointment.customer.longitude.toFixed(6)}`;
+        }
+        return 'Location not available';
+    };
+
+    const getCoords = (appointment: Appointment) => {
+        // Try exact_location first (format: "lat,lng")
+        if (appointment.customer?.exact_location) {
+            const [lat, lng] = appointment.customer.exact_location.split(',').map(parseFloat);
+            if (!isNaN(lat) && !isNaN(lng)) {
+                return { latitude: lat, longitude: lng };
+            }
+        }
+        // Fallback to separate latitude/longitude fields
+        const lat = appointment.customer?.latitude;
+        const lng = appointment.customer?.longitude;
+        
+        // Default to Manila City Hall if no coordinates
+        return {
+            latitude: lat || 14.5995,
+            longitude: lng || 120.9842,
+        };
+    };
+
+    const isAppointmentDateReached = (scheduledDate: string): boolean => {
+        try {
+            const appointmentDate = parseISO(scheduledDate);
+            const now = new Date();
+            return appointmentDate <= now;
+        } catch {
+            return false;
+        }
+    };
+
+    const filteredAppointments = appointments.filter((apt) => {
+        if (activeTab === "scheduled") {
+            // Show pending, approved, scheduled appointments
+            return apt.appointment_status === "scheduled" || apt.appointment_status === "approved" || apt.appointment_status === "pending";
+        }
+        if (activeTab === "ongoing") {
+            // Show confirmed (on the way), in-progress, and ongoing appointments
+            return apt.appointment_status === "confirmed" || apt.appointment_status === "in-progress" || apt.appointment_status === "ongoing";
+        }
+        if (activeTab === "finished") {
+            // Show finished and completed appointments
+            return apt.appointment_status === "finished" || apt.appointment_status === "completed";
+        }
+        return apt.appointment_status === activeTab;
+    });
+
+    if (loading) {
+        return (
+            <ApprovedScreenWrapper activeTab="task">
+                <View style={[styles.container, styles.centerContent]}>
+                    <ActivityIndicator size="large" color="#00796B" />
+                    <Text style={styles.loadingText}>Loading appointments...</Text>
+                </View>
+            </ApprovedScreenWrapper>
+        );
+    }
 
     return (
         <ApprovedScreenWrapper activeTab="task">
@@ -102,7 +285,7 @@ export default function FixMoToday() {
 
                 {/* Tabs */}
                 <View style={styles.tabsRow}>
-                    {["scheduled", "finished", "cancelled"].map((tab) => (
+                    {(["scheduled", "ongoing", "finished", "cancelled"] as const).map((tab) => (
                         <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={styles.tabButton}>
                             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -112,74 +295,146 @@ export default function FixMoToday() {
                     ))}
                 </View>
 
-                <FlatList
-                    data={jobs.filter((job) => job.status === activeTab)}
-                    keyExtractor={(item) => item.id}
-                    contentContainerStyle={{paddingBottom: 100}}
-                    renderItem={({item}) => {
-                        const isExpanded = expandedCard === item.id;
-                        return (
-                            <View style={styles.appointmentBox}>
-                                <View style={[styles.statusTag, {backgroundColor: statusColors[item.status]}]}>
-                                    <Text style={styles.statusText}>
-                                        {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                {filteredAppointments.length === 0 ? (
+                    <View style={styles.emptyContainer}>
+                        <Ionicons name="calendar-outline" size={64} color="#CCC" />
+                        <Text style={styles.emptyText}>No {activeTab} appointments</Text>
+                    </View>
+                ) : (
+                    <FlatList
+                        data={filteredAppointments}
+                        keyExtractor={(item) => item.appointment_id.toString()}
+                        contentContainerStyle={{paddingBottom: 100}}
+                        refreshControl={
+                            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#00796B"]} />
+                        }
+                        renderItem={({item}) => {
+                            const isExpanded = expandedCard === item.appointment_id.toString();
+                            const clientName = getClientName(item);
+                            const serviceName = getServiceName(item);
+                            const location = getLocation(item);
+                            const coords = getCoords(item);
+                            
+                            return (
+                                <View style={styles.appointmentBox}>
+                                    <View style={[styles.statusTag, {backgroundColor: statusColors[item.appointment_status]}]}>
+                                        <Text style={styles.statusText}>
+                                            {item.appointment_status === "in-progress" || item.appointment_status === "ongoing"
+                                                ? "Ongoing"
+                                                : item.appointment_status === "confirmed"
+                                                ? "On the Way"
+                                                : item.appointment_status === "approved" || item.appointment_status === "scheduled"
+                                                ? "Scheduled"
+                                                : item.appointment_status === "completed"
+                                                ? "Finished"
+                                                : item.appointment_status.charAt(0).toUpperCase() + item.appointment_status.slice(1)}
+                                        </Text>
+                                    </View>
+
+                                    <Text style={styles.bookingId}>Booking ID# {item.appointment_id}</Text>
+                                    <Text style={styles.clientName}>{clientName}</Text>
+                                    <Text style={styles.serviceType}>
+                                        Service Type: <Text
+                                        style={{color: "#00796B", fontFamily: "Poppins-SemiBold"}}>{serviceName}</Text>
                                     </Text>
-                                </View>
 
-                                <Text style={styles.clientName}>{item.client}</Text>
-                                <Text style={styles.serviceType}>
-                                    Service Type: <Text
-                                    style={{color: "#00796B", fontFamily: "Poppins-SemiBold"}}>{item.service}</Text>
-                                </Text>
-
-                                <View style={styles.row}>
                                     <View style={styles.row}>
-                                        <Ionicons name="calendar" size={16} color="#00796B"/>
-                                        <Text style={styles.datetime}>{item.datetime}</Text>
-                                    </View>
-                                    <TouchableOpacity
-                                        style={styles.chatButton}
-                                        onPress={() => handleChat(item.id, item.client)}
-                                    >
-                                        <Ionicons name="chatbubble-ellipses" size={20} color="#00796B"/>
-                                    </TouchableOpacity>
-                                </View>
-
-                                <TouchableOpacity style={styles.expandButton} onPress={() => toggleCard(item.id)}>
-                                    <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={20}
-                                              color="#00796B"/>
-                                </TouchableOpacity>
-
-                                {isExpanded && (
-                                    <View style={styles.expandedContent}>
-                                        <View style={styles.locationRow}>
-                                            <MaterialIcons name="location-pin" size={16} color="#00796B"/>
-                                            <Text style={styles.location}>{item.location}</Text>
+                                        <View style={styles.row}>
+                                            <Ionicons name="calendar" size={16} color="#00796B"/>
+                                            <Text style={styles.datetime}>{formatDateTime(item.scheduled_date)}</Text>
                                         </View>
-
-                                        <MapView
-                                            style={styles.map}
-                                            initialRegion={{
-                                                latitude: item.coords.latitude,
-                                                longitude: item.coords.longitude,
-                                                latitudeDelta: 0.01,
-                                                longitudeDelta: 0.01,
-                                            }}
+                                        <TouchableOpacity
+                                            style={styles.chatButton}
+                                            onPress={() => handleChat(item.customer_id, clientName)}
                                         >
-                                            <Marker coordinate={item.coords} title={item.client}
-                                                    description={item.service}/>
-                                        </MapView>
-
-                                        {item.status === "scheduled" && isApproved && (
-                                            <TouchableOpacity style={styles.actionButton} onPress={handleEnRoute}>
-                                                <Text style={styles.actionButtonText}>En Route to Fix</Text>
-                                            </TouchableOpacity>
-                                        )}
+                                            <Ionicons name="chatbubble-ellipses" size={20} color="#00796B"/>
+                                        </TouchableOpacity>
                                     </View>
-                                )}
-                            </View>
-                        );
+
+                                    <TouchableOpacity style={styles.expandButton} onPress={() => toggleCard(item.appointment_id.toString())}>
+                                        <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={20}
+                                                  color="#00796B"/>
+                                    </TouchableOpacity>
+
+                                    {isExpanded && (
+                                        <View style={styles.expandedContent}>
+                                            <View style={styles.locationRow}>
+                                                <MaterialIcons name="location-pin" size={16} color="#00796B"/>
+                                                <Text style={styles.location}>{location}</Text>
+                                            </View>
+
+                                            <MapView
+                                                style={styles.map}
+                                                initialRegion={{
+                                                    latitude: coords.latitude,
+                                                    longitude: coords.longitude,
+                                                    latitudeDelta: 0.01,
+                                                    longitudeDelta: 0.01,
+                                                }}
+                                            >
+                                                <Marker coordinate={coords} title={clientName}
+                                                        description={serviceName}/>
+                                            </MapView>
+
+                                            {(item.appointment_status === "scheduled" || item.appointment_status === "approved") && isApproved && isAppointmentDateReached(item.scheduled_date) && (
+                                                <TouchableOpacity style={styles.actionButton} onPress={() => handleEnRoute(item)}>
+                                                    <Text style={styles.actionButtonText}>En Route to Fix</Text>
+                                                </TouchableOpacity>
+                                            )}
+
+                                            {(item.appointment_status === "scheduled" || item.appointment_status === "approved") && isApproved && !isAppointmentDateReached(item.scheduled_date) && (
+                                                <View style={styles.disabledButton}>
+                                                    <Ionicons name="time-outline" size={16} color="#999" />
+                                                    <Text style={styles.disabledButtonText}>
+                                                        Available on {format(parseISO(item.scheduled_date), "MMM dd, yyyy 'at' h:mm a")}
+                                                    </Text>
+                                                </View>
+                                            )}
+
+                                            {(item.appointment_status === "in-progress" || item.appointment_status === "ongoing") && isApproved && (
+                                                <TouchableOpacity 
+                                                    style={styles.actionButton} 
+                                                    onPress={() => handleCompleteService(item)}
+                                                >
+                                                    <Text style={styles.actionButtonText}>Complete Service</Text>
+                                                </TouchableOpacity>
+                                            )}
+
+                                            {(item.appointment_status === "finished" || item.appointment_status === "completed") && (
+                                                <View style={styles.completedInfo}>
+                                                    <Text style={styles.completedLabel}>Final Price:</Text>
+                                                    <Text style={styles.completedValue}>₱{item.final_price.toFixed(2)}</Text>
+                                                    {item.repairDescription && (
+                                                        <>
+                                                            <Text style={styles.completedLabel}>Repair Description:</Text>
+                                                            <Text style={styles.completedDescription}>{item.repairDescription}</Text>
+                                                        </>
+                                                    )}
+                                                </View>
+                                            )}
+                                        </View>
+                                    )}
+                                </View>
+                            );
+                        }}
+                    />
+                )}
+
+                <CompleteServiceModal
+                    visible={completeModalVisible}
+                    onClose={() => {
+                        setCompleteModalVisible(false);
+                        setSelectedAppointment(null);
                     }}
+                    onComplete={handleCompleteSubmit}
+                    starting_price={
+                        selectedAppointment?.service?.service_startingprice || 
+                        selectedAppointment?.starting_price || 
+                        selectedAppointment?.final_price || 
+                        0
+                    }
+                    currentDescription={selectedAppointment?.repairDescription || ''}
+                    clientName={selectedAppointment ? getClientName(selectedAppointment) : ''}
                 />
             </View>
         </ApprovedScreenWrapper>
@@ -196,6 +451,28 @@ const styles = StyleSheet.create({
         marginTop: 30,
         color: "#333"
     },
+    centerContent: {
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    loadingText: {
+        fontSize: 14,
+        fontFamily: "PoppinsRegular",
+        color: "#666",
+        marginTop: 12,
+    },
+    emptyContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingTop: 60,
+    },
+    emptyText: {
+        fontSize: 16,
+        fontFamily: "PoppinsMedium",
+        color: "#999",
+        marginTop: 16,
+    },
     tabsRow: {flexDirection: "row", justifyContent: "space-around", marginBottom: 16},
     tabButton: {alignItems: "center"},
     tabText: {fontSize: 14, fontFamily: "PoppinsMedium", color: "#999"},
@@ -204,6 +481,7 @@ const styles = StyleSheet.create({
     appointmentBox: {backgroundColor: "#f2f2f2", borderRadius: 20, padding: 15, marginBottom: 16},
     statusTag: {paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, marginBottom: 8, alignSelf: "flex-start"},
     statusText: {color: "#fff", fontFamily: "PoppinsBold", fontSize: 12},
+    bookingId: {fontSize: 12, fontFamily: "PoppinsMedium", color: "#666", marginBottom: 4},
     clientName: {fontSize: 16, fontFamily: "PoppinsSemiBold", color: "#333"},
     serviceType: {fontSize: 14, fontFamily: "PoppinsRegular", color: "#555", marginTop: 4},
     row: {flexDirection: "row", alignItems: "center", marginTop: 10},
@@ -226,4 +504,44 @@ const styles = StyleSheet.create({
     map: {width: "100%", height: 150, borderRadius: 12, marginBottom: 10},
     actionButton: {backgroundColor: "#00796B", paddingVertical: 12, borderRadius: 8, alignItems: "center"},
     actionButtonText: {color: "#fff", fontFamily: "PoppinsSemiBold", fontSize: 14},
+    disabledButton: {
+        backgroundColor: "#F5F5F5",
+        paddingVertical: 12,
+        borderRadius: 8,
+        alignItems: "center",
+        flexDirection: "row",
+        justifyContent: "center",
+        borderWidth: 1,
+        borderColor: "#E0E0E0",
+    },
+    disabledButtonText: {
+        color: "#999",
+        fontFamily: "PoppinsMedium",
+        fontSize: 13,
+        marginLeft: 6,
+    },
+    completedInfo: {
+        backgroundColor: "#E0F2F1",
+        padding: 12,
+        borderRadius: 8,
+        marginTop: 8,
+    },
+    completedLabel: {
+        fontSize: 12,
+        fontFamily: "PoppinsMedium",
+        color: "#00796B",
+        marginBottom: 4,
+    },
+    completedValue: {
+        fontSize: 18,
+        fontFamily: "PoppinsSemiBold",
+        color: "#00796B",
+        marginBottom: 8,
+    },
+    completedDescription: {
+        fontSize: 13,
+        fontFamily: "PoppinsRegular",
+        color: "#333",
+        lineHeight: 18,
+    },
 });

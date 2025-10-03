@@ -1,29 +1,84 @@
-import React, {useState} from "react";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
 import {
-    View,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    StyleSheet,
+    ActivityIndicator,
+    Alert,
     Image,
+    Keyboard,
     KeyboardAvoidingView,
     Platform,
     ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
     TouchableWithoutFeedback,
-    Keyboard,
+    View,
 } from "react-native";
-import {useRouter} from "expo-router";
-import {Ionicons} from "@expo/vector-icons";
+import { loginProvider } from "../../../src/api/auth.api";
 
 export default function SignIn() {
     const router = useRouter();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
+    const [loading, setLoading] = useState(false);
 
-    const handleSignIn = () => {
-        // TODO: Add validation and API logic
-        router.replace("/provider/onboarding/pre_homepage");
+    const handleSignIn = async () => {
+        // Validation
+        if (!email.trim()) {
+            Alert.alert('Error', 'Please enter your email address');
+            return;
+        }
+
+        if (!password.trim()) {
+            Alert.alert('Error', 'Please enter your password');
+            return;
+        }
+
+        // Email format validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email.trim())) {
+            Alert.alert('Error', 'Please enter a valid email address');
+            return;
+        }
+
+        setLoading(true);
+
+        try {
+            // Call login API
+            const response = await loginProvider(email.trim(), password);
+
+            if (response.success && response.token) {
+                // Store token in AsyncStorage
+                await AsyncStorage.setItem('providerToken', response.token);
+                await AsyncStorage.setItem('providerId', response.providerId.toString());
+                await AsyncStorage.setItem('providerUserName', response.providerUserName);
+
+                // Navigate to home screen with provider data
+                router.replace({
+                    pathname: "/provider/onboarding/pre_homepage",
+                    params: {
+                        providerId: response.providerId.toString(),
+                        providerUserName: response.providerUserName,
+                        firstName: response.provider.firstName,
+                        lastName: response.provider.lastName,
+                    },
+                });
+            } else {
+                Alert.alert('Login Failed', response.message || 'Invalid credentials');
+            }
+        } catch (error: any) {
+            console.error('Login error:', error);
+            Alert.alert(
+                'Login Failed',
+                error.message || 'Unable to login. Please check your credentials and try again.'
+            );
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -64,8 +119,16 @@ export default function SignIn() {
                         </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity style={styles.button} onPress={handleSignIn}>
-                        <Text style={styles.buttonText}>Sign in</Text>
+                    <TouchableOpacity 
+                        style={[styles.button, loading && styles.buttonDisabled]} 
+                        onPress={handleSignIn}
+                        disabled={loading}
+                    >
+                        {loading ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={styles.buttonText}>Sign in</Text>
+                        )}
                     </TouchableOpacity>
 
                     <TouchableOpacity onPress={() => router.push("/provider/onboarding/forgot-password")}>
@@ -127,6 +190,10 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         alignItems: "center",
         marginTop: 10,
+    },
+    buttonDisabled: {
+        backgroundColor: "#7cc",
+        opacity: 0.6,
     },
     buttonText: {
         color: "#fff",

@@ -62,6 +62,74 @@ export interface ForgotPasswordVerifyRequest {
   newPassword: string;
 }
 
+export interface ProviderProfileTotals {
+  professions: number;
+  certificates: number;
+  recent_services: number;
+}
+
+export interface ProviderProfession {
+  id: number;
+  profession: string;
+  experience: string;
+  created_at?: string;
+}
+
+export interface ProviderCertificate {
+  certificate_id: number;
+  certificate_name: string;
+  certificate_number: string;
+  certificate_file_path: string;
+  expiry_date: string;
+  status?: string;
+  created_at?: string;
+}
+
+export interface ProviderRecentService {
+  service_id: number;
+  service_title: string;
+  service_description: string;
+  service_startingprice: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ProviderProfile {
+  provider_id: number;
+  first_name: string;
+  last_name: string;
+  full_name: string;
+  userName: string;
+  email: string;
+  phone_number: string;
+  profile_photo: string | null;
+  valid_id: string | null;
+  location: string | null;
+  exact_location: string | null;
+  uli: string | null;
+  birthday: string | null;
+  is_verified: boolean;
+  verification_status: string;
+  rejection_reason?: string | null;
+  verification_submitted_at?: string | null;
+  verification_reviewed_at?: string | null;
+  rating?: number;
+  ratings_count?: number;
+  is_activated: boolean;
+  created_at: string;
+  professions: ProviderProfession[];
+  certificates: ProviderCertificate[];
+  recent_services: ProviderRecentService[];
+  totals?: ProviderProfileTotals;
+}
+
+export interface ProviderProfileResponse {
+  success: boolean;
+  message: string;
+  data?: ProviderProfile;
+  provider?: ProviderProfile; // legacy support
+}
+
 // API Functions
 
 /**
@@ -284,6 +352,58 @@ export const verifyOTPAndResetPassword = async (
     console.error('Reset Password Error:', error);
     throw new Error(error.message || 'Network error. Please try again.');
   }
+};
+
+/**
+ * Get detailed provider profile using JWT token
+ * Endpoint: GET /auth/provider-profile (legacy: /auth/profile, /auth/provider/profile-detailed)
+ */
+export const getDetailedProviderProfile = async (
+  token: string
+): Promise<ProviderProfile> => {
+  const endpoints = [
+    API_CONFIG.AUTH_ENDPOINTS.PROVIDER_PROFILE,
+    '/auth/profile',
+    '/auth/provider/profile-detailed',
+  ];
+
+  let lastError: Error | null = null;
+
+  for (const path of endpoints) {
+    try {
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}${path}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      const data: ProviderProfileResponse = await response.json();
+
+      if (!response.ok || data.success === false) {
+        lastError = new Error(data?.message || `Failed to fetch provider profile (${path})`);
+        continue;
+      }
+
+      const profile = data.data || data.provider;
+
+      if (!profile) {
+        lastError = new Error(`Invalid provider profile payload received from ${path}`);
+        continue;
+      }
+
+      return profile;
+    } catch (error: any) {
+      lastError = new Error(error?.message || `Network error calling ${path}`);
+    }
+  }
+
+  console.error('Get Provider Profile Error:', lastError);
+  throw lastError || new Error('Unable to fetch provider profile');
 };
 
 /**
