@@ -1,12 +1,11 @@
-import { MessageService } from '../utils/messageAPI';
 import type {
+    ApiErrorResponse,
     Conversation,
-    Message,
     MessagesResponse,
     SearchMessagesResponse,
-    SendMessageResponse,
-    ApiErrorResponse,
+    SendMessageResponse
 } from '../types/message';
+import { MessageService } from '../utils/messageAPI';
 
 /**
  * Get all conversations for a provider

@@ -1,6 +1,7 @@
 import { useUserContext } from "@/context/UserContext";
 import ApprovedScreenWrapper from "@/navigation/ApprovedScreenWrapper";
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -16,7 +17,6 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getDetailedProviderProfile, ProviderProfile as ProviderProfileType } from "../../../src/api/auth.api";
 
 type MenuItem = {

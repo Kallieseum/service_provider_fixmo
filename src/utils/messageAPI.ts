@@ -1,15 +1,13 @@
 import { io, Socket } from 'socket.io-client';
 import { API_CONFIG } from '../constants/config';
 import type {
-  ApiErrorResponse,
-  Conversation,
-  ConversationDetailsResponse,
-  ConversationResponse,
-  CreateConversationResponse,
-  Message,
-  MessagesResponse,
-  SearchMessagesResponse,
-  SendMessageResponse,
+    ApiErrorResponse,
+    ConversationDetailsResponse,
+    ConversationResponse,
+    CreateConversationResponse,
+    MessagesResponse,
+    SearchMessagesResponse,
+    SendMessageResponse
 } from '../types/message';
 
 const BACKEND_URL = API_CONFIG.BASE_URL;
