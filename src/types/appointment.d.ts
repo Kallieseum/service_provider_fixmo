@@ -6,6 +6,7 @@ export type AppointmentStatus =
   | 'confirmed'  // On the way
   | 'in-progress'  // Ongoing/Working
   | 'finished' 
+  | 'in-warranty' // After service is completed, within warranty period
   | 'completed'
   | 'cancelled'
   | 'no-show'

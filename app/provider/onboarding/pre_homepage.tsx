@@ -4,7 +4,7 @@ import { format, parseISO } from "date-fns";
 import { useFonts } from "expo-font";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -209,7 +209,7 @@ export default function Homepage() {
                 ? `${ongoingAppointment.customer.first_name} ${ongoingAppointment.customer.last_name}`.trim()
                 : 'Unknown Client',
             serviceName: ongoingAppointment.service?.service_title || 'Service',
-            dateTime: format(parseISO(ongoingAppointment.scheduled_date), "MMMM dd, yyyy | h:mm a")
+            dateTime: format(parseISO(ongoingAppointment.scheduled_date), "MMMM dd, yyyy")
         }
         : null;
 
@@ -284,23 +284,38 @@ export default function Homepage() {
 
                     </View>
 
-                    <Pressable
-                        onPress={() =>
-                            router.push({
-                                pathname: "/notification",
-                                params: {notifications: JSON.stringify(sampleNotifications)},
-                            })
-                        }
-                    >
-                        <View style={styles.bellWrapper}>
-                            <Ionicons name="notifications-outline" size={26} color="#333"/>
-                            {notificationCount > 0 && (
-                                <View style={styles.badge}>
-                                    <Text style={styles.badgeText}>{notificationCount}</Text>
-                                </View>
-                            )}
-                        </View>
-                    </Pressable>
+                    <View style={styles.headerIcons}>
+                        {/* Messages Icon */}
+                        <Pressable
+                            onPress={() => router.push("/messaging")}
+                            style={styles.iconButton}
+                        >
+                            <View style={styles.bellWrapper}>
+                                <Ionicons name="chatbubble-ellipses-outline" size={26} color="#333"/>
+                                {/* Add unread count badge here if needed */}
+                            </View>
+                        </Pressable>
+
+                        {/* Notification Icon */}
+                        <Pressable
+                            onPress={() =>
+                                router.push({
+                                    pathname: "/notification",
+                                    params: {notifications: JSON.stringify(sampleNotifications)},
+                                })
+                            }
+                            style={styles.iconButton}
+                        >
+                            <View style={styles.bellWrapper}>
+                                <Ionicons name="notifications-outline" size={26} color="#333"/>
+                                {notificationCount > 0 && (
+                                    <View style={styles.badge}>
+                                        <Text style={styles.badgeText}>{notificationCount}</Text>
+                                    </View>
+                                )}
+                            </View>
+                        </Pressable>
+                    </View>
                 </View>
 
                 {providerProfile && (
@@ -606,6 +621,14 @@ const styles = StyleSheet.create({
         paddingVertical: 1
     },
     badgeText: {color: "#fff", fontSize: 10, fontFamily: "PoppinsBold"},
+    headerIcons: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+    },
+    iconButton: {
+        padding: 4,
+    },
     modalBackground: {flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center"},
     modalCard: {backgroundColor: "#EDEDED", borderRadius: 16, padding: 16, width: "90%", maxHeight: "85%"},
     closeBtn: {alignSelf: "flex-end", marginBottom: 10},

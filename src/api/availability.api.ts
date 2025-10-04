@@ -151,4 +151,47 @@ export const toggleDayAvailability = async (
 
   return setAvailability(availabilityData, token);
 };
+
+/**
+ * Update availability for a specific date
+ * @param date - The date in YYYY-MM-DD format
+ * @param isActive - Whether to enable or disable availability
+ * @param token - JWT authentication token
+ */
+export const updateAvailabilityByDate = async (
+  date: string,
+  isActive: boolean,
+  token: string
+): Promise<any> => {
+  try {
+    console.log(`Updating availability for date: ${date}, isActive: ${isActive}`);
+    
+    const response = await fetch(
+      `${API_CONFIG.BASE_URL}/api/availability/date`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          date,
+          isActive,
+        }),
+      }
+    );
+
+    const data = await response.json();
+    console.log('Update availability by date response:', JSON.stringify(data));
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to update availability');
+    }
+
+    return data;
+  } catch (error: any) {
+    console.error('Update Availability By Date Error:', error);
+    throw new Error(error.message || 'Network error. Please try again.');
+  }
+};
  

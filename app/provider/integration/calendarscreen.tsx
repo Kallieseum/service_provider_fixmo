@@ -1,52 +1,116 @@
-import React, {useState, useEffect} from "react";
-import {
-    View,
-    Text,
-    Modal,
-    TouchableOpacity,
-    StyleSheet,
-} from "react-native";
-import {Calendar} from "react-native-calendars";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import React, { useEffect, useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    Modal,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from "react-native";
+import { Calendar } from "react-native-calendars";
+import { getProviderAvailability, updateAvailabilityByDate } from "../../../src/api/availability.api";
 import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
 
 const CalendarScreen = () => {
     const [selectedDate, setSelectedDate] = useState<string>("");
     const [disabledDates, setDisabledDates] = useState<{ [key: string]: boolean }>({});
     const [modalVisible, setModalVisible] = useState(false);
+    const [loading, setLoading] = useState(true);
 
     const today = new Date().toISOString().split("T")[0];
+    const maxDate = new Date();
+    maxDate.setDate(maxDate.getDate() + 30);
+    const maxDateStr = maxDate.toISOString().split("T")[0];
     const isApproved = true; // Use centralized approved logic
 
-    // Load saved disabled dates
+    // Fetch availability from backend
     useEffect(() => {
-        const loadDisabledDates = async () => {
+        const fetchAvailability = async () => {
             try {
-                const saved = await AsyncStorage.getItem("disabledDates");
-                if (saved) setDisabledDates(JSON.parse(saved));
-            } catch (error) {
-                console.error("Error loading disabled dates:", error);
+                const token = await AsyncStorage.getItem('providerToken');
+                const providerIdStr = await AsyncStorage.getItem('providerId');
+
+                if (!token || !providerIdStr) {
+                    Alert.alert('Error', 'Authentication required');
+                    setLoading(false);
+                    return;
+                }
+
+                const providerId = parseInt(providerIdStr, 10);
+                const data = await getProviderAvailability(providerId, token);
+
+                // Build disabled dates based on day-of-week availability
+                const newDisabledDates: { [key: string]: boolean } = {};
+                const currentDate = new Date();
+                
+                // Check next 30 days
+                for (let i = 0; i <= 30; i++) {
+                    const date = new Date(currentDate);
+                    date.setDate(date.getDate() + i);
+                    const dateStr = date.toISOString().split('T')[0];
+                    const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+                    
+                    // Find if this day of week is available
+                    const dayAvailability = data.find(av => av.dayOfWeek === dayName);
+                    
+                    if (dayAvailability && !dayAvailability.availability_isActive) {
+                        newDisabledDates[dateStr] = true;
+                    }
+                }
+
+                setDisabledDates(newDisabledDates);
+            } catch (error: any) {
+                console.error('Fetch availability error:', error);
+                Alert.alert('Error', error.message || 'Failed to load availability');
+            } finally {
+                setLoading(false);
             }
         };
-        loadDisabledDates();
+
+        fetchAvailability();
     }, []);
 
-    // Save whenever disabledDates changes
-    useEffect(() => {
-        const saveDisabledDates = async () => {
-            try {
-                await AsyncStorage.setItem("disabledDates", JSON.stringify(disabledDates));
-            } catch (error) {
-                console.error("Error saving disabled dates:", error);
-            }
-        };
-        saveDisabledDates();
-    }, [disabledDates]);
-
-    const toggleBooking = () => {
+    const toggleBooking = async () => {
         if (selectedDate) {
-            setDisabledDates(prev => ({...prev, [selectedDate]: !prev[selectedDate]}));
-            setModalVisible(false);
+            try {
+                const token = await AsyncStorage.getItem('providerToken');
+                
+                if (!token) {
+                    Alert.alert('Error', 'Authentication required');
+                    return;
+                }
+
+                // Check if date is in the past
+                if (selectedDate < today) {
+                    Alert.alert('Invalid Date', 'Cannot modify past dates');
+                    return;
+                }
+
+                // Check if date is beyond 30 days
+                if (selectedDate > maxDateStr) {
+                    Alert.alert('Invalid Date', 'Can only manage bookings for the next 30 days');
+                    return;
+                }
+
+                // Toggle the state
+                const newIsActive = !disabledDates[selectedDate]; // If currently disabled (true), enable it (true)
+                
+                // Call API
+                const response = await updateAvailabilityByDate(selectedDate, newIsActive, token);
+                
+                // Update local state
+                setDisabledDates(prev => ({...prev, [selectedDate]: !newIsActive}));
+                setModalVisible(false);
+                
+                Alert.alert(
+                    'Success',
+                    response.message || `Bookings ${newIsActive ? 'enabled' : 'disabled'} for ${selectedDate}`
+                );
+            } catch (error: any) {
+                Alert.alert('Error', error.message || 'Failed to update availability');
+            }
         }
     };
 
@@ -55,7 +119,12 @@ const CalendarScreen = () => {
             <View style={styles.content}>
                 <Text style={styles.header}>Calendar</Text>
 
-                {isApproved ? (
+                {loading ? (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color="#399d9d" />
+                        <Text style={styles.loadingText}>Loading calendar...</Text>
+                    </View>
+                ) : isApproved ? (
                     <>
                         {/* Calendar Box */}
                         <View style={styles.calendar}>
@@ -167,6 +236,8 @@ export default CalendarScreen;
 const styles = StyleSheet.create({
     content: {flex: 1, padding: 20},
     header: {fontSize: 18, fontFamily: "PoppinsSemiBold", textAlign: "center", marginBottom: 10, marginTop: 30},
+    loadingContainer: {flex: 1, justifyContent: "center", alignItems: "center"},
+    loadingText: {marginTop: 10, fontFamily: "PoppinsRegular", color: "#666"},
     calendar: {justifyContent: "center", alignItems: "center", flexDirection: "column", marginTop: 30},
     calendarWrap: {width: 350, height: 370, borderRadius: 20, elevation: 5},
     disabledList: {marginTop: 15},

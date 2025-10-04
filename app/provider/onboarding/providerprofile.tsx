@@ -81,7 +81,7 @@ export default function ProviderProfile() {
                 onPress={() => {
                     if (item.label === "Log Out") return openLogout();
                     if (isBlocked) return alert("Your account is pending approval.");
-                    if (item.route) return router.push(item.route);
+                    if (item.route) return router.push(item.route as any);
                     alert("This feature is not yet available.");
                 }}
                 disabled={isBlocked}

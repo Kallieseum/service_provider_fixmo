@@ -214,7 +214,7 @@ export const completeAppointment = async (
   return updateAppointment(
     appointmentId,
     {
-      appointment_status: 'finished',
+      appointment_status: 'in-warranty',
       final_price: finalPrice,
       repairDescription: repairDescription,
     },

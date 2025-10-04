@@ -186,7 +186,7 @@ export default function FixMoToday() {
     const formatDateTime = (dateString: string) => {
         try {
             const date = parseISO(dateString);
-            return format(date, "MMM dd, yyyy | h:mm a");
+            return format(date, "MMM dd, yyyy");
         } catch {
             return dateString;
         }
@@ -386,7 +386,7 @@ export default function FixMoToday() {
                                                 <View style={styles.disabledButton}>
                                                     <Ionicons name="time-outline" size={16} color="#999" />
                                                     <Text style={styles.disabledButtonText}>
-                                                        Available on {format(parseISO(item.scheduled_date), "MMM dd, yyyy 'at' h:mm a")}
+                                                        Available on {format(parseISO(item.scheduled_date), "MMM dd, yyyy")} (from 8:00 AM)
                                                     </Text>
                                                 </View>
                                             )}

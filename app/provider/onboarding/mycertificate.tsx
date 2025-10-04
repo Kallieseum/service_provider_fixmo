@@ -1,16 +1,22 @@
-import React, {useState} from "react";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
-    View,
+    ActivityIndicator,
+    Alert,
+    Image,
+    LayoutAnimation,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
     Text,
     TouchableOpacity,
-    StyleSheet,
-    ScrollView,
-    Image,
-    Platform,
     UIManager,
-    LayoutAnimation,
+    View,
 } from "react-native";
-import {Ionicons} from "@expo/vector-icons";
+import { getCertificates } from "../../../src/api/certificates.api";
 
 type Certificate = {
     id: string;
@@ -27,7 +33,11 @@ if (Platform.OS === "android") {
 }
 
 export default function MyCertificates() {
-    const [certificates] = useState<Certificate[]>([
+    const router = useRouter();
+    const [certificates, setCertificates] = useState<Certificate[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [mockCertificates] = useState<Certificate[]>([
         {
             id: "1",
             name: "Electrical NC II",
@@ -60,6 +70,56 @@ export default function MyCertificates() {
     const [activeTab, setActiveTab] = useState<"Approved" | "Pending" | "Rejected">("Approved");
     const [expandedCertId, setExpandedCertId] = useState<string | null>(null);
 
+    useEffect(() => {
+        fetchCertificates();
+    }, []);
+
+    const fetchCertificates = async () => {
+        try {
+            const token = await AsyncStorage.getItem('providerToken');
+            if (!token) {
+                Alert.alert('Error', 'Authentication required. Please log in again.');
+                setCertificates(mockCertificates);
+                setLoading(false);
+                return;
+            }
+
+            const data = await getCertificates(token);
+            // Map API data to local Certificate type
+            const mappedData: Certificate[] = data.map(cert => ({
+                id: cert.certificate_id.toString(),
+                name: cert.certificate_name,
+                certificateNumber: cert.certificate_number,
+                uploadedAt: new Date(cert.created_at).toLocaleDateString('en-US', { 
+                    year: 'numeric', 
+                    month: 'short', 
+                    day: 'numeric' 
+                }),
+                expiryDate: cert.expiry_date 
+                    ? new Date(cert.expiry_date).toLocaleDateString('en-US', { 
+                        year: 'numeric', 
+                        month: 'short', 
+                        day: 'numeric' 
+                    }) 
+                    : 'No expiry date',
+                fileUri: cert.certificate_file_path,
+                status: cert.certificate_status,
+            }));
+            setCertificates(mappedData);
+        } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to load certificates');
+            setCertificates(mockCertificates);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
+    };
+
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchCertificates();
+    };
+
     const tabs: ("Approved" | "Pending" | "Rejected")[] = ["Approved", "Pending", "Rejected"];
     const filteredCertificates = certificates.filter((c) => c.status === activeTab);
 
@@ -73,6 +133,15 @@ export default function MyCertificates() {
         Pending: "#FBC02D",
         Rejected: "#E53935",
     };
+
+    if (loading) {
+        return (
+            <View style={[styles.container, styles.centerContent]}>
+                <ActivityIndicator size="large" color="#00796B" />
+                <Text style={styles.loadingText}>Loading certificates...</Text>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
@@ -98,7 +167,12 @@ export default function MyCertificates() {
             </View>
 
             {/* Certificates List */}
-            <ScrollView contentContainerStyle={{paddingBottom: 120, paddingHorizontal: 16}}>
+            <ScrollView 
+                contentContainerStyle={{paddingBottom: 120, paddingHorizontal: 16}}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#00796B"]} />
+                }
+            >
                 {filteredCertificates.length > 0 ? (
                     filteredCertificates.map((cert) => {
                         const isExpanded = expandedCertId === cert.id;
@@ -133,7 +207,10 @@ export default function MyCertificates() {
                                             <Image source={{uri: cert.fileUri}} style={styles.certificateImage}/>
                                         )}
                                         {cert.status === "Rejected" && (
-                                            <TouchableOpacity style={styles.resubmitButton}>
+                                            <TouchableOpacity 
+                                                style={styles.resubmitButton}
+                                                onPress={() => router.push('/provider/integration/addnewcertificate')}
+                                            >
                                                 <Ionicons name="cloud-upload-outline" size={18} color="#fff"/>
                                                 <Text style={styles.resubmitText}>Submit New Certificate</Text>
                                             </TouchableOpacity>
@@ -149,7 +226,10 @@ export default function MyCertificates() {
             </ScrollView>
 
             {/* Floating Add Button */}
-            <TouchableOpacity style={styles.fabButton}>
+            <TouchableOpacity 
+                style={styles.fabButton}
+                onPress={() => router.push('/provider/integration/addnewcertificate')}
+            >
                 <Ionicons name="add" size={28} color="#fff"/>
             </TouchableOpacity>
         </View>
@@ -161,6 +241,16 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: "#fff",
         paddingTop: 50,
+    },
+    centerContent: {
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    loadingText: {
+        marginTop: 12,
+        fontSize: 14,
+        fontFamily: "Poppins-Regular",
+        color: "#666",
     },
 
     // Header

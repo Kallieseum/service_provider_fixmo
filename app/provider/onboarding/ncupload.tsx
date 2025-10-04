@@ -18,12 +18,12 @@ import certificateServicesJson from "../../assets/data/certificateservices.json"
 
 // ---------- Types ----------
 type CertificateService = {
+    id: string;
     title: string;
-    services: string[];
-};
-
-type CertificateServicesJSON = {
-    categories: CertificateService[];
+    services: {
+        title: string;
+        description: string;
+    }[];
 };
 
 // Using arrays for API compatibility
@@ -41,8 +41,8 @@ type CertificateEntry = {
     file: string | null;
 };
 
-// ---------- Data ----------
-const certificateServices: CertificateServicesJSON = certificateServicesJson;
+// ---------- Data ----------//
+const certificateServices: CertificateService[] = certificateServicesJson;
 
 export default function RequirementsUpload() {
     const router = useRouter();
@@ -360,7 +360,7 @@ export default function RequirementsUpload() {
                                     }}
                                 >
                                     <Picker.Item label="Select Certificate" value=""/>
-                                    {certificateServices.categories.map(
+                                    {certificateServices.map(
                                         (cat: CertificateService, i: number) => (
                                             <Picker.Item
                                                 key={i}

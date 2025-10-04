@@ -1,66 +1,125 @@
-import React, {useState} from "react";
-import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    ScrollView,
-    TextInput,
-    Platform,
-    SafeAreaView,
-} from "react-native";
-import {useRouter} from "expo-router";
-import * as DocumentPicker from "expo-document-picker";
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import {Picker} from "@react-native-picker/picker";
-import {Ionicons} from "@expo/vector-icons";
+import { Picker } from "@react-native-picker/picker";
+import * as DocumentPicker from "expo-document-picker";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
+import {
+    ActivityIndicator,
+    Alert,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from "react-native";
+import { uploadCertificate } from "../../../src/api/certificates.api";
 import certificateServicesJson from "../../assets/data/certificateservices.json";
 
 // ---------- Types ----------
 type CertificateService = {
+    id: string;
     title: string;
-    services: string[];
-};
-
-type CertificateServicesJSON = {
-    categories: CertificateService[];
+    services: {
+        title: string;
+        description: string;
+    }[];
 };
 
 type Certificate = {
     type: string;
     number: string;
     expiry: Date | null;
-    file: string | null;
+    file: {
+        uri: string;
+        name: string;
+        type: string;
+        size?: number;
+    } | null;
 };
 
 // ---------- Data ----------
-const certificateServices: CertificateServicesJSON = certificateServicesJson;
+const certificateServices: CertificateService[] = certificateServicesJson;
 
 export default function AddNewCertificate() {
     const router = useRouter();
-    const [certificates, setCertificates] = useState<Certificate[]>([
-        {type: "", number: "", expiry: null, file: null},
-    ]);
-    const [showDatePicker, setShowDatePicker] = useState<number | null>(null);
+    const [certificate, setCertificate] = useState<Certificate>({
+        type: "",
+        number: "",
+        expiry: null,
+        file: null,
+    });
+    const [showDatePicker, setShowDatePicker] = useState(false);
+    const [uploading, setUploading] = useState(false);
 
-    const addCertificate = () => {
-        setCertificates([
-            ...certificates,
-            {type: "", number: "", expiry: null, file: null},
-        ]);
-    };
-
-    const handleAdd = () => {
-        if (
-            certificates.some(
-                (cert) => !cert.type || !cert.number || !cert.expiry || !cert.file
-            )
-        ) {
-            alert("Please complete all certificate fields.");
+    const handleAdd = async () => {
+        // Validation - ALL fields are now required
+        if (!certificate.type) {
+            Alert.alert("Required Field", "Please select a certificate type.");
+            return;
+        }
+        if (!certificate.number || certificate.number.trim() === "") {
+            Alert.alert("Required Field", "Please enter the certificate number.");
+            return;
+        }
+        if (!certificate.expiry) {
+            Alert.alert("Required Field", "Please select an expiry date.");
+            return;
+        }
+        if (!certificate.file) {
+            Alert.alert("Required Field", "Please upload the certificate file.");
             return;
         }
 
-        router.push("/provider/onboarding/mycertificate"); // Navigate to MyCertificates
+        setUploading(true);
+
+        try {
+            const token = await AsyncStorage.getItem('providerToken');
+            if (!token) {
+                Alert.alert('Error', 'Authentication required. Please log in again.');
+                setUploading(false);
+                return;
+            }
+
+            const certificateData = {
+                certificate_name: certificate.type,
+                certificate_number: certificate.number.trim(),
+                expiry_date: certificate.expiry.toISOString().split('T')[0],
+                certificateFile: {
+                    uri: certificate.file.uri,
+                    name: certificate.file.name,
+                    type: certificate.file.type,
+                },
+            };
+
+            await uploadCertificate(certificateData, token);
+
+            Alert.alert(
+                'Success',
+                'Certificate uploaded successfully!',
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => router.push('/provider/onboarding/mycertificate'),
+                    },
+                ]
+            );
+        } catch (error: any) {
+            // Handle errors including duplicate certificates
+            const errorMessage = error.message || 'Failed to upload certificate';
+            if (errorMessage.toLowerCase().includes('duplicate') || 
+                errorMessage.toLowerCase().includes('already exists') ||
+                errorMessage.toLowerCase().includes('already uploaded')) {
+                Alert.alert('Duplicate Certificate', 'This certificate has already been uploaded to your account.');
+            } else {
+                Alert.alert('Upload Error', errorMessage);
+            }
+        } finally {
+            setUploading(false);
+        }
     };
 
     return (
@@ -75,118 +134,138 @@ export default function AddNewCertificate() {
 
             <ScrollView contentContainerStyle={styles.scrollContainer}>
                 <View style={styles.contentWrapper}>
-                    {certificates.map((cert, index) => (
-                        <View key={index} style={styles.section}>
+                    <View style={styles.section}>
+                        <View style={styles.labelRow}>
                             <Text style={styles.title}>Certificate Type</Text>
-                            <View style={styles.pickerWrapper}>
-                                <Picker
-                                    selectedValue={cert.type}
-                                    onValueChange={(val) => {
-                                        const updated = [...certificates];
-                                        updated[index].type = val;
-                                        setCertificates(updated);
-                                    }}
-                                >
-                                    <Picker.Item label="Select Certificate" value=""/>
-                                    {certificateServices.categories.map((cat, i) => (
-                                        <Picker.Item key={i} label={cat.title} value={cat.title}/>
-                                    ))}
-                                </Picker>
-                            </View>
+                            <Text style={styles.required}>*</Text>
+                        </View>
+                        <View style={styles.pickerWrapper}>
+                            <Picker
+                                selectedValue={certificate.type}
+                                onValueChange={(val) => setCertificate({...certificate, type: val})}
+                            >
+                                <Picker.Item label="Select Certificate" value=""/>
+                                {certificateServices.map((cat, i) => (
+                                    <Picker.Item key={i} label={cat.title} value={cat.title}/>
+                                ))}
+                            </Picker>
+                        </View>
 
+                        <View style={styles.labelRow}>
                             <Text style={styles.title}>Certificate Number</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Enter certificate number"
-                                value={cert.number}
-                                onChangeText={(val) => {
-                                    const updated = [...certificates];
-                                    updated[index].number = val;
-                                    setCertificates(updated);
+                            <Text style={styles.required}>*</Text>
+                        </View>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Enter certificate number"
+                            value={certificate.number}
+                            onChangeText={(val) => setCertificate({...certificate, number: val})}
+                        />
+
+                        <View style={styles.labelRow}>
+                            <Text style={styles.title}>Expiry Date</Text>
+                            <Text style={styles.required}>*</Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => setShowDatePicker(true)}
+                            style={styles.input}
+                        >
+                            <Text style={certificate.expiry ? styles.dateText : styles.placeholderText}>
+                                {certificate.expiry ? certificate.expiry.toDateString() : "Select expiry date"}
+                            </Text>
+                        </TouchableOpacity>
+
+                        {showDatePicker && (
+                            <DateTimePicker
+                                value={certificate.expiry || new Date()}
+                                mode="date"
+                                display="default"
+                                minimumDate={new Date()}
+                                onChange={(event, selectedDate) => {
+                                    setShowDatePicker(false);
+                                    if (selectedDate) {
+                                        setCertificate({...certificate, expiry: selectedDate});
+                                    }
                                 }}
                             />
+                        )}
 
-                            <Text style={styles.title}>Expiry Date</Text>
-                            <TouchableOpacity
-                                onPress={() => setShowDatePicker(index)}
-                                style={styles.input}
-                            >
-                                <Text>
-                                    {cert.expiry ? cert.expiry.toDateString() : "Select expiry date"}
-                                </Text>
-                            </TouchableOpacity>
-
-                            {showDatePicker === index && (
-                                <DateTimePicker
-                                    value={cert.expiry || new Date()}
-                                    mode="date"
-                                    display="default"
-                                    onChange={(event, selectedDate) => {
-                                        setShowDatePicker(null);
-                                        if (selectedDate) {
-                                            const updated = [...certificates];
-                                            updated[index].expiry = selectedDate;
-                                            setCertificates(updated);
-                                        }
-                                    }}
-                                />
-                            )}
-
+                        <View style={styles.labelRow}>
                             <Text style={styles.title}>Upload Certificate File</Text>
-                            <View style={{alignItems: "center"}}>
-                                <TouchableOpacity
-                                    onPress={async () => {
+                            <Text style={styles.required}>*</Text>
+                        </View>
+                        <View style={{alignItems: "center"}}>
+                            <TouchableOpacity
+                                onPress={async () => {
+                                    try {
                                         const result = await DocumentPicker.getDocumentAsync({
-                                            type: "*/*",
+                                            type: ["application/pdf", "image/*", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
                                             copyToCacheDirectory: true,
                                         });
+                                        
                                         if (
                                             "assets" in result &&
                                             result.assets &&
                                             result.assets.length > 0
                                         ) {
-                                            const updated = [...certificates];
-                                            updated[index].file = result.assets[0].uri;
-                                            setCertificates(updated);
+                                            const file = result.assets[0];
+                                            
+                                            // Validate file size (10MB max)
+                                            const maxSize = 10 * 1024 * 1024;
+                                            if (file.size && file.size > maxSize) {
+                                                Alert.alert('File Too Large', 'Please select a file smaller than 10MB.');
+                                                return;
+                                            }
+                                            
+                                            setCertificate({
+                                                ...certificate,
+                                                file: {
+                                                    uri: file.uri,
+                                                    name: file.name,
+                                                    type: file.mimeType || 'application/octet-stream',
+                                                    size: file.size,
+                                                }
+                                            });
                                         }
-                                    }}
-                                    style={styles.circleButton}
-                                >
-                                    <Ionicons name="cloud-upload-outline" size={40} color="#008080"/>
-                                </TouchableOpacity>
-                            </View>
-
-                            {cert.file && (
-                                <Text style={styles.note}>
-                                    Selected File: {cert.file.split("/").pop()}
-                                </Text>
-                            )}
-
-                            {certificates.length > 1 && (
-                                <TouchableOpacity
-                                    style={styles.removeButton}
-                                    onPress={() => {
-                                        const updated = certificates.filter((_, i) => i !== index);
-                                        setCertificates(updated);
-                                    }}
-                                >
-                                    <Ionicons name="trash-outline" size={16} color="red"/>
-                                    <Text style={styles.removeText}>Remove</Text>
-                                </TouchableOpacity>
-                            )}
+                                    } catch (error) {
+                                        console.error('Document picker error:', error);
+                                        Alert.alert('Error', 'Failed to pick document. Please try again.');
+                                    }
+                                }}
+                                style={styles.circleButton}
+                            >
+                                <Ionicons name="cloud-upload-outline" size={40} color="#008080"/>
+                            </TouchableOpacity>
                         </View>
-                    ))}
 
-                    <TouchableOpacity onPress={addCertificate} style={styles.addButton}>
-                        <Text style={styles.addButtonText}>+ Add Certificate</Text>
-                    </TouchableOpacity>
+                        {certificate.file && (
+                            <View>
+                                <Text style={styles.note}>
+                                    Selected File: {certificate.file.name}
+                                </Text>
+                                {certificate.file.size && (
+                                    <Text style={styles.note}>
+                                        Size: {(certificate.file.size / 1024 / 1024).toFixed(2)} MB
+                                    </Text>
+                                )}
+                            </View>
+                        )}
+                    </View>
                 </View>
             </ScrollView>
 
             {/* Fixed Add Button */}
             <View style={styles.fixedButtonContainer}>
-                <TouchableOpacity style={styles.nextButton} onPress={handleAdd}>
-                    <Text style={styles.nextText}>Add</Text>
+                <TouchableOpacity 
+                    style={[styles.nextButton, uploading && styles.nextButtonDisabled]} 
+                    onPress={handleAdd}
+                    disabled={uploading}
+                >
+                    {uploading ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                        <Text style={styles.nextText}>Add</Text>
+                    )}
                 </TouchableOpacity>
             </View>
         </SafeAreaView>
@@ -212,7 +291,19 @@ const styles = StyleSheet.create({
     },
     contentWrapper: {flex: 1},
     section: {marginBottom: 40},
-    title: {fontSize: 16, fontWeight: "bold", marginBottom: 8, marginTop: 10},
+    labelRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginTop: 10,
+    },
+    title: {fontSize: 16, fontWeight: "bold", marginBottom: 8},
+    required: {
+        color: "red",
+        fontSize: 16,
+        fontWeight: "bold",
+        marginLeft: 4,
+        marginBottom: 8,
+    },
     input: {
         borderWidth: 1,
         borderColor: "#eee",
@@ -221,6 +312,14 @@ const styles = StyleSheet.create({
         fontSize: 16,
         backgroundColor: "#f0f0f0",
         marginTop: 10,
+    },
+    dateText: {
+        color: "#000",
+        fontSize: 16,
+    },
+    placeholderText: {
+        color: "#999",
+        fontSize: 16,
     },
     pickerWrapper: {
         borderWidth: 1,
@@ -239,7 +338,12 @@ const styles = StyleSheet.create({
         alignItems: "center",
         marginTop: 12,
     },
-    note: {fontSize: 12, color: "#888", textAlign: "center", marginTop: 8},
+    note: {
+        fontSize: 12, 
+        color: "#888", 
+        textAlign: "center", 
+        marginTop: 4,
+    },
     fixedButtonContainer: {
         position: "absolute",
         bottom: 0,
@@ -254,22 +358,8 @@ const styles = StyleSheet.create({
         borderRadius: 30,
         alignItems: "center",
     },
+    nextButtonDisabled: {
+        backgroundColor: "#ccc",
+    },
     nextText: {color: "#fff", fontSize: 16, fontWeight: "bold"},
-    addButton: {
-        backgroundColor: "#e0f7f7",
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        borderRadius: 30,
-        alignSelf: "center",
-        marginBottom: 20,
-    },
-    addButtonText: {color: "#008080", fontWeight: "bold", fontSize: 14},
-    removeButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        marginTop: 10,
-        alignSelf: "flex-end",
-        gap: 4,
-    },
-    removeText: {color: "red", fontSize: 12, fontWeight: "600"},
 });
