@@ -1,38 +1,48 @@
-import React, {useState, useEffect} from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
+    ActivityIndicator,
+    Alert,
     KeyboardAvoidingView,
     Platform,
+    SafeAreaView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import {useRouter, useLocalSearchParams} from 'expo-router';
 import {
     CodeField,
     Cursor,
     useBlurOnFulfill,
     useClearByFocusCell,
 } from 'react-native-confirmation-code-field';
+import { requestProviderOTP, verifyProviderOTP } from '../../../src/api/auth.api';
+import { OTP_CONFIG } from '../../../src/constants/config';
 
-const CELL_COUNT = 6;
+const CELL_COUNT = OTP_CONFIG.LENGTH;
 
 export default function OTPScreen() {
     const router = useRouter();
-    const {phone} = useLocalSearchParams();
+    const {email} = useLocalSearchParams<{ email: string }>();
     const [value, setValue] = useState('');
     const ref = useBlurOnFulfill({value, cellCount: CELL_COUNT});
     const [props, getCellOnLayoutHandler] = useClearByFocusCell({value, setValue});
-    const [timer, setTimer] = useState(40); // 1:00 countdown
+    const [timer, setTimer] = useState(OTP_CONFIG.RESEND_COOLDOWN_SECONDS);
     const [isResendVisible, setIsResendVisible] = useState(false);
+    const [isVerifying, setIsVerifying] = useState(false);
+    const [resending, setResending] = useState(false);
+    const [validationStatus, setValidationStatus] = useState<'none' | 'valid' | 'invalid'>('none');
+    const [errorMessage, setErrorMessage] = useState('');
 
-    // Format phone number: 912 345 6789
-    const formatPhone = (raw?: string) => {
-        if (!raw || raw.length !== 10) return raw;
-        return `${raw.slice(0, 3)} ${raw.slice(3, 6)} ${raw.slice(6)}`;
-    };
+    // Prevent back navigation
+    useFocusEffect(
+        React.useCallback(() => {
+            // Prevent going back to email screen
+            return () => {};
+        }, [])
+    );
 
-    // Countdown logic
     useEffect(() => {
         if (timer > 0) {
             const interval = setInterval(() => setTimer((prev) => prev - 1), 1000);
@@ -48,20 +58,70 @@ export default function OTPScreen() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    const handleVerify = () => {
-        if (value.length === 6) {
-            // You can validate OTP here
-            router.push('/provider/onboarding/agreement');
-        } else {
-            alert('Please enter the full 6-digit code');
+    useEffect(() => {
+        if (value.length === CELL_COUNT) {
+            handleVerifyOTP();
+        }
+    }, [value]);
+
+    const handleVerifyOTP = async () => {
+        if (isVerifying) return;
+        
+        setIsVerifying(true);
+        setErrorMessage('');
+        
+        try {
+            // Call API to verify OTP
+            const result = await verifyProviderOTP(email || '', value);
+            
+            if (result.valid) {
+                // Show green cells
+                setValidationStatus('valid');
+                
+                // Wait a bit to show the green feedback
+                setTimeout(() => {
+                    // OTP verified successfully, proceed to agreement
+                    router.replace({
+                        pathname: '/provider/onboarding/agreement',
+                        params: { 
+                            email: email || '',
+                            otp: value 
+                        },
+                    });
+                }, 500);
+            }
+        } catch (error: any) {
+            // Show red cells and error message
+            setValidationStatus('invalid');
+            setErrorMessage(error.message || 'Invalid OTP. Please try again.');
+            
+            // Clear after showing error
+            setTimeout(() => {
+                setValue('');
+                setValidationStatus('none');
+                setErrorMessage('');
+            }, 1500);
+        } finally {
+            setIsVerifying(false);
         }
     };
 
-    const handleResend = () => {
-
-        alert('OTP resent!');
-        setTimer(66); // restart countdown
-        setIsResendVisible(false);
+    const handleResend = async () => {
+        if (resending) return;
+        
+        setResending(true);
+        
+        try {
+            await requestProviderOTP(email || '');
+            Alert.alert('Success', `OTP resent to ${email}!`);
+            setTimer(OTP_CONFIG.RESEND_COOLDOWN_SECONDS);
+            setIsResendVisible(false);
+            setValue(''); // Clear the OTP input
+        } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to resend OTP. Please try again.');
+        } finally {
+            setResending(false);
+        }
     };
 
     return (
@@ -69,46 +129,62 @@ export default function OTPScreen() {
             style={styles.wrapper}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-            <View style={styles.container}>
-                <Text style={styles.title}>Enter the 6-digit code</Text>
-                <Text style={styles.subtitle}>
-                    Sent to <Text style={styles.phone}>+63 {formatPhone(phone as string)}</Text>
-                </Text>
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.container}>
+                    <Text style={styles.title}>Enter One-Time Pin</Text>
+                    <Text style={styles.subtitle}>
+                        A One-Time Pin was sent to <Text style={styles.email}>{email}</Text>
+                    </Text>
 
-                <CodeField
-                    ref={ref}
-                    {...props}
-                    value={value}
-                    onChangeText={setValue}
-                    cellCount={CELL_COUNT}
-                    rootStyle={styles.codeFieldRoot}
-                    keyboardType="number-pad"
-                    textContentType="oneTimeCode"
-                    renderCell={({index, symbol, isFocused}) => (
-                        <Text
-                            key={index}
-                            style={[styles.cell, isFocused && styles.focusCell]}
-                            onLayout={getCellOnLayoutHandler(index)}
-                        >
-                            {symbol || (isFocused ? <Cursor/> : null)}
+                    <CodeField
+                        ref={ref}
+                        {...props}
+                        value={value}
+                        onChangeText={(text) => {
+                            setValue(text);
+                            setValidationStatus('none');
+                            setErrorMessage('');
+                        }}
+                        cellCount={CELL_COUNT}
+                        rootStyle={styles.codeFieldRoot}
+                        keyboardType="number-pad"
+                        textContentType="oneTimeCode"
+                        editable={!isVerifying && validationStatus === 'none'}
+                        renderCell={({index, symbol, isFocused}) => (
+                            <Text
+                                key={index}
+                                style={[
+                                    styles.cell,
+                                    isFocused && validationStatus === 'none' && styles.focusCell,
+                                    validationStatus === 'valid' && styles.validCell,
+                                    validationStatus === 'invalid' && styles.invalidCell,
+                                ]}
+                                onLayout={getCellOnLayoutHandler(index)}
+                            >
+                                {symbol || (isFocused ? <Cursor/> : null)}
+                            </Text>
+                        )}
+                    />
+
+                    {errorMessage ? (
+                        <Text style={styles.errorText}>{errorMessage}</Text>
+                    ) : null}
+
+                    {isVerifying && (
+                        <ActivityIndicator size="small" color="#008080" style={styles.loader} />
+                    )}
+
+                    {isResendVisible ? (
+                        <TouchableOpacity onPress={handleResend}>
+                            <Text style={styles.resendButton}>Resend Code</Text>
+                        </TouchableOpacity>
+                    ) : (
+                        <Text style={styles.resend}>
+                            Didn’t receive the code? Request again in {formatTime()}
                         </Text>
                     )}
-                />
-
-                <TouchableOpacity style={styles.button} onPress={handleVerify}>
-                    <Text style={styles.buttonText}>Next</Text>
-                </TouchableOpacity>
-
-                {isResendVisible ? (
-                    <TouchableOpacity onPress={handleResend}>
-                        <Text style={styles.resendButton}>Resend Code</Text>
-                    </TouchableOpacity>
-                ) : (
-                    <Text style={styles.resend}>
-                        Didn’t receive the code? Request again in {formatTime()}
-                    </Text>
-                )}
-            </View>
+                </View>
+            </SafeAreaView>
         </KeyboardAvoidingView>
     );
 }
@@ -118,13 +194,17 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#fff',
     },
+    safeArea: {
+        flex: 1,
+    },
     container: {
         flex: 1,
         padding: 24,
         justifyContent: 'center',
+        alignItems: 'center',
     },
     title: {
-        fontSize: 22,
+        fontSize: 20,
         fontWeight: '600',
         marginBottom: 10,
         textAlign: 'center',
@@ -135,38 +215,49 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         color: '#555',
     },
-    phone: {
+    email: {
         fontWeight: 'bold',
         color: '#000',
     },
     codeFieldRoot: {
         marginBottom: 20,
         justifyContent: 'center',
+        alignItems: 'center',
+        flexDirection: 'row',
     },
     cell: {
-        width: 40,
+        width: 50,
         height: 50,
         lineHeight: 48,
         fontSize: 24,
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: '#ccc',
         textAlign: 'center',
-        marginHorizontal: 5,
-        borderRadius: 8,
+        marginHorizontal: 4,
+        borderRadius: 15,
     },
     focusCell: {
         borderColor: '#008080',
     },
-    button: {
-        backgroundColor: '#008080',
-        paddingVertical: 14,
-        borderRadius: 30,
-        marginTop: 10,
+    validCell: {
+        borderColor: '#4CAF50',
+        borderWidth: 2,
+        backgroundColor: '#E8F5E9',
     },
-    buttonText: {
-        color: '#fff',
-        fontSize: 16,
+    invalidCell: {
+        borderColor: '#F44336',
+        borderWidth: 2,
+        backgroundColor: '#FFEBEE',
+    },
+    errorText: {
+        color: '#F44336',
+        fontSize: 14,
         textAlign: 'center',
+        marginTop: 10,
+        fontWeight: '500',
+    },
+    loader: {
+        marginTop: 10,
     },
     resend: {
         marginTop: 20,

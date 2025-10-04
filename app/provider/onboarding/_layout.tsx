@@ -1,11 +1,5 @@
-import {Stack} from 'expo-router';
+import { Stack } from 'expo-router';
 
-export default function ProviderOnboardingLayout() {
-    return (
-        <Stack
-            screenOptions={{
-                headerShown: false,
-            }}
-        />
-    );
+export default function OnboardingLayout() {
+  return <Stack screenOptions={{ headerShown: false }} />;
 }

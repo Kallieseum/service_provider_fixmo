@@ -1,0 +1,286 @@
+[
+  {
+    "id": "plumbing-ncii",
+    "title": "Plumbing NCII",
+    "services": [
+      {
+        "title": "Water Supply Line Installation",
+        "description": "Installing new pipelines for kitchens, bathrooms, and laundry areas to ensure proper water flow and pressure.",
+        "startingPrice": { "min": 800, "max": 2000 }
+      },
+      {
+        "title": "Bathroom and Kitchen Fixture Installation",
+        "description": "Setting up sinks, toilets, showers, bathtubs, faucets, and bidets, and connecting them to the water supply and drainage system.",
+        "startingPrice": { "min": 500, "max": 1500 }
+      },
+      {
+        "title": "Pipe Fitting and Replacement",
+        "description": "Measuring, cutting, joining, and installing pipes; replacing old or leaking pipes with durable materials like PVC, PPR, or copper.",
+        "startingPrice": { "min": 700, "max": 1800 }
+      },
+      {
+        "title": "Leak Detection and Repair",
+        "description": "Locating and fixing water leaks in supply lines, drains, or fittings to prevent water damage and wastage.",
+        "startingPrice": { "min": 400, "max": 1200 }
+      },
+      {
+        "title": "Outdoor and Auxiliary Plumbing Works",
+        "description": "Installing garden faucets, irrigation or sprinkler systems, and outdoor kitchen/laundry water connections.",
+        "startingPrice": { "min": 600, "max": 2000 }
+      }
+    ]
+  },
+  {
+    "id": "electrical-installation-and-maintenance-ncii",
+    "title": "Electrical Installation and Maintenance (EIM) NCII",
+    "services": [
+      {
+        "title": "House Wiring Installation",
+        "description": "Installing new electrical wiring systems in houses, including outlets, switches, lighting, and circuit breakers.",
+        "startingPrice": { "min": 1500, "max": 5000 }
+      },
+      {
+        "title": "Outlet and Switch Installation",
+        "description": "Adding or relocating power outlets and switches to improve household convenience and safety.",
+        "startingPrice": { "min": 300, "max": 800 }
+      },
+      {
+        "title": "Lighting Fixture Installation and Repair",
+        "description": "Setting up ceiling lights, chandeliers, LED fixtures, outdoor lighting, and replacing defective bulbs or wirings.",
+        "startingPrice": { "min": 400, "max": 1500 }
+      },
+      {
+        "title": "Electrical System Troubleshooting and Repair",
+        "description": "Identifying faults such as short circuits, tripped breakers, or faulty switches and repairing them safely.",
+        "startingPrice": { "min": 500, "max": 2000 }
+      },
+      {
+        "title": "Preventive Electrical Maintenance",
+        "description": "Inspecting electrical systems for loose connections, damaged wires, or overloaded circuits to avoid accidents.",
+        "startingPrice": { "min": 600, "max": 1800 }
+      }
+    ]
+  },
+  {
+    "id": "rac-servicing-ncii",
+    "title": "Refrigeration and Air-Conditioning (RAC) Servicing NC II (Domestic)",
+    "services": [
+      {
+        "title": "Install domestic refrigeration and air-conditioning units",
+        "description": "For homeowners who need assistance in installing domestic refrigeration and AC units such as Window-type, Package-type (PACU), and Commercial (CACU).",
+        "startingPrice": { "min": 1000, "max": 3000 }
+      },
+      {
+        "title": "Service & maintain domestic refrigeration and air-conditioning units",
+        "description": "A service that covers the maintenance of domestic refrigeration and air-conditioning units, including cleaning, maintaining fan motor assembly, servicing evaporator/condenser, and servicing electrical power/control circuits.",
+        "startingPrice": { "min": 800, "max": 2500 }
+      },
+      {
+        "title": "Troubleshoot & repair domestic refrigeration and air-conditioning systems",
+        "description": "",
+        "startingPrice": { "min": 1000, "max": 3500 }
+      }
+    ]
+  },
+  {
+    "id": "carpentry-ncii",
+    "title": "Carpentry NCII",
+    "services": [
+      {
+        "title": "House Framing and Structural Carpentry",
+        "description": "Building or repairing wooden frameworks for walls, partitions, ceilings, doors, and windows.",
+        "startingPrice": { "min": 1200, "max": 4000 }
+      },
+      {
+        "title": "Cabinet and Furniture Making",
+        "description": "Constructing or repairing built-in cabinets, wardrobes, shelves, tables, and other wooden furniture.",
+        "startingPrice": { "min": 1000, "max": 3500 }
+      },
+      {
+        "title": "Door and Window Installation/Repair",
+        "description": "Installing wooden doors, jambs, and window frames; repairing misaligned or damaged panels.",
+        "startingPrice": { "min": 800, "max": 2500 }
+      },
+      {
+        "title": "Flooring and Ceiling Works",
+        "description": "Installing wooden or laminated flooring, ceiling panels, and moldings to enhance interior finishes.",
+        "startingPrice": { "min": 1000, "max": 3000 }
+      },
+      {
+        "title": "Finishing and Woodworks",
+        "description": "Sanding, varnishing, and refinishing wooden surfaces for furniture, doors, and flooring to improve durability and aesthetics.",
+        "startingPrice": { "min": 600, "max": 2000 }
+      }
+    ]
+  },
+  {
+    "id": "masonry-ncii-nciii",
+    "title": "Masonry NCII & NCIII",
+    "services": [
+      {
+        "title": "Block/Brick Layering",
+        "description": "Constructing or repairing walls, partitions, fences, and small structures using hollow blocks or bricks.",
+        "startingPrice": { "min": 1000, "max": 4000 }
+      },
+      {
+        "title": "Plaster Wall/Surface Finishing",
+        "description": "Applying plaster (mortar/cement) over masonry or concrete walls to have a smooth/semi-smooth surface.",
+        "startingPrice": { "min": 800, "max": 2500 }
+      },
+      {
+        "title": "Repair of Cracked Walls and Surfaces",
+        "description": "Restoring damaged masonry surfaces, filling gaps, and reinforcing weak areas.",
+        "startingPrice": { "min": 600, "max": 2000 }
+      },
+      {
+        "title": "Stone Works for Landscaping",
+        "description": "Installing garden stone pathways, decorative stone walls, or outdoor stone cladding.",
+        "startingPrice": { "min": 1200, "max": 5000 }
+      },
+      {
+        "title": "Repair of Defective Concrete",
+        "description": "Installing or repairing concrete floors, driveways, walkways, and outdoor pavements.",
+        "startingPrice": { "min": 1000, "max": 3500 }
+      }
+    ]
+  },
+  {
+    "id": "tile-setting-ncii",
+    "title": "Tile Setting NCII",
+    "services": [
+      {
+        "title": "Surface Preparation & Finishing",
+        "description": "Leveling and smoothing surfaces; mixing adhesive/mortar correctly; cleaning surfaces; making sure substrate is appropriate.",
+        "startingPrice": { "min": 800, "max": 2000 }
+      },
+      {
+        "title": "Tiling Corners",
+        "description": "Proper installation at corners: ensuring internal corners (inside corners) and external corners are neat.",
+        "startingPrice": { "min": 600, "max": 1800 }
+      },
+      {
+        "title": "Installing Tiles on Curved Surfaces",
+        "description": "Laying ceramic, porcelain, or natural stone tiles on indoor and outdoor floors with proper leveling and alignment.",
+        "startingPrice": { "min": 1000, "max": 3000 }
+      },
+      {
+        "title": "Tile Repair / Maintenance",
+        "description": "Replacing cracked, chipped, or misaligned tiles while ensuring consistent color and pattern.",
+        "startingPrice": { "min": 500, "max": 1500 }
+      },
+      {
+        "title": "Wall Tiling",
+        "description": "Installing wall tiles in kitchens, bathrooms, and other interior/exterior walls for protection and aesthetics.",
+        "startingPrice": { "min": 800, "max": 2500 }
+      },
+      {
+        "title": "Tile Installation on Floors",
+        "description": "Working on curved or irregular surfaces (e.g. rounded pillars, curved walls or niches).",
+        "startingPrice": { "min": 1000, "max": 3000 }
+      },
+      {
+        "title": "Grouting",
+        "description": "Applying grout, sealants, and polishing tiles to enhance durability and appearance.",
+        "startingPrice": { "min": 400, "max": 1000 }
+      }
+    ]
+  },
+  {
+    "id": "construction-painting-ncii-nciii",
+    "title": "Construction Painting NCII/NCIII",
+    "services": [
+      {
+        "title": "Surface Sanding",
+        "description": "Preparing walls before painting.",
+        "startingPrice": { "min": 300, "max": 800 }
+      },
+      {
+        "title": "Retouch/Repaint",
+        "description": "Fixing spots, touching up areas with detected defects, and matching colors.",
+        "startingPrice": { "min": 400, "max": 1200 }
+      },
+      {
+        "title": "Wall Painting",
+        "description": "Properly applying paint to the wall in any color of preference.",
+        "startingPrice": { "min": 800, "max": 3000 }
+      },
+      {
+        "title": "Mixing/Tinting Paints",
+        "description": "Exactly matching color, preparing custom tints, mixing according to preferred color.",
+        "startingPrice": { "min": 500, "max": 1500 }
+      }
+    ]
+  },
+  {
+    "id": "consumer-electronics-servicing-ncii",
+    "title": "Consumer Electronics Servicing (CES) NC II",
+    "services": [
+      {
+        "title": "Television Installation and Repair",
+        "description": "Setting up LED/LCD/Smart TVs, wall-mounting, troubleshooting display issues, and repairing power or sound defects.",
+        "startingPrice": { "min": 500, "max": 2000 }
+      },
+      {
+        "title": "Repairing/Troubleshooting Audio, Video Equipment",
+        "description": "Installing, configuring, and repairing speakers, amplifiers, and surround sound systems.",
+        "startingPrice": { "min": 600, "max": 1800 }
+      },
+      {
+        "title": "Repair / Maintenance of Domestic Electronic Appliances",
+        "description": "",
+        "startingPrice": { "min": 400, "max": 1500 }
+      },
+      {
+        "title": "Mobile and Gadget Repair (Basic)",
+        "description": "Performing minor repairs on mobile phones, tablets, and electronic devices such as charging port or battery issues.",
+        "startingPrice": { "min": 300, "max": 1000 }
+      },
+      {
+        "title": "Small Electronics Repair",
+        "description": "Servicing household gadgets like electric fans, rice cookers, blenders, and induction cookers.",
+        "startingPrice": { "min": 300, "max": 800 }
+      },
+      {
+        "title": "Home Electronics Installation and Setup",
+        "description": "Installing Wi-Fi routers, CCTV systems, set-top boxes, or entertainment systems for household use.",
+        "startingPrice": { "min": 500, "max": 1500 }
+      }
+    ]
+  },
+  {
+    "id": "computer-system-servicing-ncii",
+    "title": "Computer System Servicing (CSS) NC II",
+    "services": [
+      {
+        "title": "Computer System Assembly/Setup",
+        "description": "Assembling desktop PCs from parts, installing operating systems, and setting up basic applications for home use.",
+        "startingPrice": { "min": 800, "max": 2000 }
+      },
+      {
+        "title": "PC Troubleshooting",
+        "description": "Diagnosing and fixing hardware issues (e.g., faulty power supply, RAM, hard drives) and basic software errors.",
+        "startingPrice": { "min": 500, "max": 1500 }
+      },
+      {
+        "title": "Network Installation (Wi-Fi, printer sharing)",
+        "description": "Setting up home Wi-Fi routers, LAN connections, and small home networks for internet sharing and device connectivity.",
+        "startingPrice": { "min": 600, "max": 1800 }
+      },
+      {
+        "title": "Repair unit/gadget hardware related problem",
+        "description": "Installing and configuring printers, scanners, webcams, and external storage devices.",
+        "startingPrice": { "min": 500, "max": 1200 }
+      },
+      {
+        "title": "Backup, Recovery, & Data Protection",
+        "description": "Helping homeowners back up important files and recovering data from damaged or formatted drives.",
+        "startingPrice": { "min": 800, "max": 2500 }
+      },
+      {
+        "title": "Virus Removal and System Maintenance",
+        "description": "Installing antivirus software, removing malware, optimizing system performance, and performing regular check-ups.",
+        "startingPrice": { "min": 500, "max": 1500 }
+      }
+    ]
+  }
+]
