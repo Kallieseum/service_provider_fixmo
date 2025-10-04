@@ -1,13 +1,11 @@
-import { API_CONFIG } from '../constants/config';
+import { MessageService } from '../utils/messageAPI';
 import type {
-    ApiErrorResponse,
     Conversation,
-    ConversationDetailsResponse,
-    ConversationResponse,
-    CreateConversationResponse,
+    Message,
     MessagesResponse,
     SearchMessagesResponse,
     SendMessageResponse,
+    ApiErrorResponse,
 } from '../types/message';
 
 /**
@@ -24,26 +22,19 @@ export const getConversations = async (
   includeCompleted: boolean = true
 ): Promise<Conversation[]> => {
   try {
-    const response = await fetch(
-      `${API_CONFIG.BASE_URL}/api/messages/conversations?userType=provider&page=${page}&limit=${limit}&includeCompleted=${includeCompleted}`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    const data: ConversationResponse | ApiErrorResponse = await response.json();
-
-    if (!response.ok || !data.success) {
-      throw new Error(
-        (data as ApiErrorResponse).message || 'Failed to fetch conversations'
-      );
+    // Ensure MessageService is initialized
+    let messageAPI = MessageService.getInstance();
+    if (!messageAPI) {
+      messageAPI = MessageService.initialize(token);
     }
 
-    return (data as ConversationResponse).conversations || [];
+    const result = await messageAPI.getConversations('provider', page, limit, includeCompleted);
+
+    if (!result.success) {
+      throw new Error((result as ApiErrorResponse).message || 'Failed to fetch conversations');
+    }
+
+    return result.conversations || [];
   } catch (error: any) {
     console.error('Get Conversations Error:', error);
     throw new Error(error.message || 'Network error. Please try again.');
@@ -60,31 +51,22 @@ export const getConversationDetails = async (
   token: string
 ): Promise<Conversation> => {
   try {
-    const response = await fetch(
-      `${API_CONFIG.BASE_URL}/api/messages/conversations/${conversationId}?userType=provider`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    const result: ConversationDetailsResponse | ApiErrorResponse =
-      await response.json();
-
-    if (!response.ok || !result.success) {
-      throw new Error(
-        (result as ApiErrorResponse).message || 'Failed to fetch conversation details'
-      );
+    let messageAPI = MessageService.getInstance();
+    if (!messageAPI) {
+      messageAPI = MessageService.initialize(token);
     }
 
-    if (!(result as ConversationDetailsResponse).data) {
+    const result = await messageAPI.getConversationDetails(conversationId, 'provider');
+
+    if (!result.success) {
+      throw new Error((result as ApiErrorResponse).message || 'Failed to fetch conversation details');
+    }
+
+    if (!result.data) {
       throw new Error('No conversation data received');
     }
 
-    return (result as ConversationDetailsResponse).data;
+    return result.data;
   } catch (error: any) {
     console.error('Get Conversation Details Error:', error);
     throw new Error(error.message || 'Network error. Please try again.');
@@ -105,24 +87,18 @@ export const getMessages = async (
   limit: number = 50
 ): Promise<MessagesResponse> => {
   try {
-    const response = await fetch(
-      `${API_CONFIG.BASE_URL}/api/messages/conversations/${conversationId}/messages?page=${page}&limit=${limit}`,
-      {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    let messageAPI = MessageService.getInstance();
+    if (!messageAPI) {
+      messageAPI = MessageService.initialize(token);
+    }
 
-    const data: MessagesResponse = await response.json();
+    const result = await messageAPI.getMessages(conversationId, page, limit);
 
-    if (!response.ok || !data.success) {
+    if (!result.success) {
       throw new Error('Failed to fetch messages');
     }
 
-    return data;
+    return result as MessagesResponse;
   } catch (error: any) {
     console.error('Get Messages Error:', error);
     throw new Error(error.message || 'Network error. Please try again.');
@@ -151,43 +127,31 @@ export const sendMessage = async (
   }
 ): Promise<SendMessageResponse> => {
   try {
-    const formData = new FormData();
-    formData.append('content', content);
-    formData.append('messageType', messageType);
-    formData.append('userType', 'provider');
-
-    if (replyToId) {
-      formData.append('replyToId', replyToId.toString());
+    let messageAPI = MessageService.getInstance();
+    if (!messageAPI) {
+      messageAPI = MessageService.initialize(token);
     }
 
-    if (attachment) {
-      // @ts-ignore - React Native FormData handles this differently
-      formData.append('attachment', {
-        uri: attachment.uri,
-        name: attachment.name,
-        type: attachment.type,
-      });
-    }
+    const attachmentData = attachment ? {
+      uri: attachment.uri,
+      name: attachment.name,
+      type: attachment.type,
+    } : undefined;
 
-    const response = await fetch(
-      `${API_CONFIG.BASE_URL}/api/messages/conversations/${conversationId}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          // Don't set Content-Type for FormData, let the browser set it with boundary
-        },
-        body: formData,
-      }
+    const result = await messageAPI.sendMessage(
+      conversationId,
+      content,
+      messageType,
+      replyToId,
+      attachmentData,
+      'provider'
     );
 
-    const data: SendMessageResponse = await response.json();
-
-    if (!response.ok || !data.success) {
-      throw new Error(data.message || 'Failed to send message');
+    if (!result.success) {
+      throw new Error((result as ApiErrorResponse).message || 'Failed to send message');
     }
 
-    return data;
+    return result as SendMessageResponse;
   } catch (error: any) {
     console.error('Send Message Error:', error);
     throw new Error(error.message || 'Network error. Please try again.');
@@ -206,22 +170,15 @@ export const markMessagesAsRead = async (
   token: string
 ): Promise<void> => {
   try {
-    const response = await fetch(
-      `${API_CONFIG.BASE_URL}/api/messages/conversations/${conversationId}/messages/read`,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ messageIds }),
-      }
-    );
+    let messageAPI = MessageService.getInstance();
+    if (!messageAPI) {
+      messageAPI = MessageService.initialize(token);
+    }
 
-    const data = await response.json();
+    const result = await messageAPI.markAsRead(conversationId, messageIds);
 
-    if (!response.ok || !data.success) {
-      throw new Error(data.message || 'Failed to mark messages as read');
+    if (!result.success) {
+      throw new Error((result as ApiErrorResponse).message || 'Failed to mark messages as read');
     }
   } catch (error: any) {
     console.error('Mark Messages As Read Error:', error);
@@ -245,29 +202,24 @@ export const searchMessages = async (
   limit: number = 20
 ): Promise<SearchMessagesResponse> => {
   try {
-    let url = `${API_CONFIG.BASE_URL}/api/messages/search?query=${encodeURIComponent(
-      query
-    )}&userType=provider&page=${page}&limit=${limit}`;
-
-    if (conversationId) {
-      url += `&conversationId=${conversationId}`;
+    let messageAPI = MessageService.getInstance();
+    if (!messageAPI) {
+      messageAPI = MessageService.initialize(token);
     }
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
+    const result = await messageAPI.searchMessages(
+      query,
+      conversationId,
+      page,
+      limit,
+      'provider'
+    );
 
-    const data: SearchMessagesResponse = await response.json();
-
-    if (!response.ok || !data.success) {
+    if (!result.success) {
       throw new Error('Failed to search messages');
     }
 
-    return data;
+    return result as SearchMessagesResponse;
   } catch (error: any) {
     console.error('Search Messages Error:', error);
     throw new Error(error.message || 'Network error. Please try again.');
@@ -286,26 +238,15 @@ export const createConversation = async (
   token: string
 ): Promise<Conversation> => {
   try {
-    const response = await fetch(
-      `${API_CONFIG.BASE_URL}/api/messages/conversations`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          customerId,
-          providerId,
-          userType: 'provider',
-        }),
-      }
-    );
+    let messageAPI = MessageService.getInstance();
+    if (!messageAPI) {
+      messageAPI = MessageService.initialize(token);
+    }
 
-    const result: CreateConversationResponse = await response.json();
+    const result = await messageAPI.createConversation(customerId, providerId, 'provider');
 
-    if (!response.ok || !result.success) {
-      throw new Error(result.message || 'Failed to create conversation');
+    if (!result.success) {
+      throw new Error((result as ApiErrorResponse).message || 'Failed to create conversation');
     }
 
     return result.data;
@@ -325,24 +266,19 @@ export const archiveConversation = async (
   token: string
 ): Promise<void> => {
   try {
-    const response = await fetch(
-      `${API_CONFIG.BASE_URL}/api/messages/conversations/${conversationId}/archive`,
-      {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    let messageAPI = MessageService.getInstance();
+    if (!messageAPI) {
+      messageAPI = MessageService.initialize(token);
+    }
 
-    const data = await response.json();
+    const result = await messageAPI.archiveConversation(conversationId);
 
-    if (!response.ok || !data.success) {
-      throw new Error(data.message || 'Failed to archive conversation');
+    if (!result.success) {
+      throw new Error((result as ApiErrorResponse).message || 'Failed to archive conversation');
     }
   } catch (error: any) {
     console.error('Archive Conversation Error:', error);
     throw new Error(error.message || 'Network error. Please try again.');
   }
 };
+

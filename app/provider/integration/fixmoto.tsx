@@ -21,6 +21,7 @@ import { completeAppointment, getAppointmentsByProviderId, startEnRoute } from "
 import CompleteServiceModal from "../../../src/components/modals/CompleteServiceModal";
 import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
 import type { Appointment } from "../../../src/types/appointment";
+import { API_CONFIG } from "../../../src/constants/config";
 
 if (Platform.OS === "android") {
     UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -33,6 +34,7 @@ const statusColors: Record<string, string> = {
     confirmed: "#FF9800",
     "in-progress": "#F44336",
     ongoing: "#F44336",
+    "in-warranty": "#2196F3",
     finished: "#9E9E9E",
     completed: "#9E9E9E",
     cancelled: "#E53935",
@@ -41,7 +43,7 @@ const statusColors: Record<string, string> = {
 
 export default function FixMoToday() {
     const [expandedCard, setExpandedCard] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<"scheduled" | "ongoing" | "finished" | "cancelled">("scheduled");
+    const [activeTab, setActiveTab] = useState<"scheduled" | "ongoing" | "finished" | "completed" | "cancelled">("scheduled");
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -147,11 +149,98 @@ export default function FixMoToday() {
         );
     };
 
-    const handleChat = (customerId: number, clientName: string) => {
-        router.push({
-            pathname: "/provider/integration/messagescreen",
-            params: {clientId: customerId.toString(), clientName},
-        });
+    const handleChat = async (appointment: Appointment) => {
+        try {
+            const token = await AsyncStorage.getItem('providerToken');
+            const providerId = await AsyncStorage.getItem('provider_id');
+            
+            if (!token || !providerId) {
+                Alert.alert('Error', 'Please log in again');
+                return;
+            }
+
+            const customerId = appointment.customer_id;
+            const clientName = appointment.customer 
+                ? `${appointment.customer.first_name} ${appointment.customer.last_name}` 
+                : 'Customer';
+            const clientPhone = appointment.customer?.phone_number || '';
+
+            // First, check if conversation already exists
+            const conversationsResponse = await fetch(
+                `${API_CONFIG.BASE_URL}/api/messages/conversations?userType=provider`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            if (!conversationsResponse.ok) {
+                throw new Error('Failed to fetch conversations');
+            }
+
+            const conversationsData = await conversationsResponse.json();
+            
+            // Find existing conversation with this customer
+            const existingConversation = conversationsData.conversations?.find(
+                (conv: any) => conv.customer_id === customerId
+            );
+
+            if (existingConversation) {
+                // Route to existing conversation
+                router.push({
+                    pathname: '/messaging/chat',
+                    params: {
+                        conversationId: existingConversation.conversation_id.toString(),
+                        customerId: customerId.toString(),
+                        customerName: clientName,
+                        customerPhone: clientPhone,
+                        customerPhoto: '', // Customer type doesn't include profile_photo
+                        appointmentStatus: appointment.appointment_status || 'active',
+                    }
+                });
+            } else {
+                // Create new conversation
+                const createResponse = await fetch(
+                    `${API_CONFIG.BASE_URL}/api/messages/conversations`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            customerId: customerId,
+                            providerId: parseInt(providerId),
+                            userType: 'provider'
+                        })
+                    }
+                );
+
+                if (!createResponse.ok) {
+                    throw new Error('Failed to create conversation');
+                }
+
+                const createData = await createResponse.json();
+                
+                // Route to new conversation
+                router.push({
+                    pathname: '/messaging/chat',
+                    params: {
+                        conversationId: createData.conversation.conversation_id.toString(),
+                        customerId: customerId.toString(),
+                        customerName: clientName,
+                        customerPhone: clientPhone,
+                        customerPhoto: '', // Customer type doesn't include profile_photo
+                        appointmentStatus: appointment.appointment_status || 'active',
+                    }
+                });
+            }
+        } catch (error: any) {
+            console.error('Error handling chat:', error);
+            Alert.alert('Error', error.message || 'Failed to open conversation');
+        }
     };
 
     const handleCompleteService = (appointment: Appointment) => {
@@ -245,7 +334,23 @@ export default function FixMoToday() {
         try {
             const appointmentDate = parseISO(scheduledDate);
             const now = new Date();
-            return appointmentDate <= now;
+            
+            // Check if appointment date is in the past
+            if (appointmentDate < now) {
+                return true;
+            }
+            
+            // Check if appointment is today and it's past 8 AM
+            const appointmentDay = new Date(appointmentDate.getFullYear(), appointmentDate.getMonth(), appointmentDate.getDate());
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            
+            if (appointmentDay.getTime() === today.getTime()) {
+                // Same day - check if it's past 8 AM
+                const currentHour = now.getHours();
+                return currentHour >= 8;
+            }
+            
+            return false;
         } catch {
             return false;
         }
@@ -261,8 +366,12 @@ export default function FixMoToday() {
             return apt.appointment_status === "confirmed" || apt.appointment_status === "in-progress" || apt.appointment_status === "ongoing";
         }
         if (activeTab === "finished") {
-            // Show finished and completed appointments
-            return apt.appointment_status === "finished" || apt.appointment_status === "completed";
+            // Show in-warranty appointments (active warranty)
+            return apt.appointment_status === "in-warranty" || apt.appointment_status === "finished";
+        }
+        if (activeTab === "completed") {
+            // Show completed appointments (warranty expired)
+            return apt.appointment_status === "completed";
         }
         return apt.appointment_status === activeTab;
     });
@@ -285,7 +394,7 @@ export default function FixMoToday() {
 
                 {/* Tabs */}
                 <View style={styles.tabsRow}>
-                    {(["scheduled", "ongoing", "finished", "cancelled"] as const).map((tab) => (
+                    {(["scheduled", "ongoing", "finished", "completed", "cancelled"] as const).map((tab) => (
                         <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} style={styles.tabButton}>
                             <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
@@ -325,8 +434,10 @@ export default function FixMoToday() {
                                                 ? "On the Way"
                                                 : item.appointment_status === "approved" || item.appointment_status === "scheduled"
                                                 ? "Scheduled"
+                                                : item.appointment_status === "in-warranty"
+                                                ? "In Warranty"
                                                 : item.appointment_status === "completed"
-                                                ? "Finished"
+                                                ? "Completed"
                                                 : item.appointment_status.charAt(0).toUpperCase() + item.appointment_status.slice(1)}
                                         </Text>
                                     </View>
@@ -345,7 +456,7 @@ export default function FixMoToday() {
                                         </View>
                                         <TouchableOpacity
                                             style={styles.chatButton}
-                                            onPress={() => handleChat(item.customer_id, clientName)}
+                                            onPress={() => handleChat(item)}
                                         >
                                             <Ionicons name="chatbubble-ellipses" size={20} color="#00796B"/>
                                         </TouchableOpacity>
@@ -400,8 +511,14 @@ export default function FixMoToday() {
                                                 </TouchableOpacity>
                                             )}
 
-                                            {(item.appointment_status === "finished" || item.appointment_status === "completed") && (
+                                            {(item.appointment_status === "in-warranty" || item.appointment_status === "completed" || item.appointment_status === "finished") && (
                                                 <View style={styles.completedInfo}>
+                                                    {item.appointment_status === "in-warranty" && (
+                                                        <View style={styles.warrantyBadge}>
+                                                            <Ionicons name="shield-checkmark" size={16} color="#2196F3" />
+                                                            <Text style={styles.warrantyText}>Under Warranty Period</Text>
+                                                        </View>
+                                                    )}
                                                     <Text style={styles.completedLabel}>Final Price:</Text>
                                                     <Text style={styles.completedValue}>₱{item.final_price.toFixed(2)}</Text>
                                                     {item.repairDescription && (
@@ -543,5 +660,22 @@ const styles = StyleSheet.create({
         fontFamily: "PoppinsRegular",
         color: "#333",
         lineHeight: 18,
+    },
+    warrantyBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#E3F2FD",
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: "#2196F3",
+    },
+    warrantyText: {
+        fontSize: 13,
+        fontFamily: "PoppinsSemiBold",
+        color: "#2196F3",
+        marginLeft: 6,
     },
 });

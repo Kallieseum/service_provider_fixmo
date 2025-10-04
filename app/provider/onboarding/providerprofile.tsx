@@ -1,20 +1,23 @@
-import React, {useRef, useState} from "react";
+import { useUserContext } from "@/context/UserContext";
+import ApprovedScreenWrapper from "@/navigation/ApprovedScreenWrapper";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
-    View,
-    Text,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
+    ActivityIndicator,
+    Animated,
+    Easing,
     Image,
     Modal,
     Pressable,
-    Animated,
-    Easing,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import {Ionicons} from "@expo/vector-icons";
-import {useRouter} from "expo-router";
-import {useUserContext} from "@/context/UserContext";
-import ApprovedScreenWrapper from "@/navigation/ApprovedScreenWrapper";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getDetailedProviderProfile, ProviderProfile as ProviderProfileType } from "../../../src/api/auth.api";
 
 type MenuItem = {
     label: string;
@@ -40,11 +43,40 @@ export default function ProviderProfile() {
     const router = useRouter();
     const {user, logout} = useUserContext();
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [providerProfile, setProviderProfile] = useState<ProviderProfileType | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const isApproved = user?.status === "approved";
 
     // Animated bottom sheet
     const slideAnim = useState(new Animated.Value(300))[0];
+
+    // Fetch provider profile on mount
+    useEffect(() => {
+        const fetchProfile = async () => {
+            try {
+                setLoading(true);
+                setError(null);
+                
+                const token = await AsyncStorage.getItem('providerToken');
+                if (!token) {
+                    setError('No authentication token found');
+                    return;
+                }
+
+                const profileData = await getDetailedProviderProfile(token);
+                setProviderProfile(profileData);
+            } catch (err: any) {
+                console.error('Failed to fetch provider profile:', err);
+                setError(err.message || 'Failed to load profile');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchProfile();
+    }, []);
 
     const openLogout = () => {
         setShowLogoutModal(true);
@@ -119,25 +151,75 @@ export default function ProviderProfile() {
                 <Text style={styles.title}>Profile</Text>
             </View>
 
-            <ScrollView ref={scrollRef} contentContainerStyle={{paddingBottom: 120}}>
-                {/* Header */}
-                <View style={styles.header}>
-                    {user?.profileImage ? (
-                        <Image source={{uri: user.profileImage}} style={styles.profileImage}/>
-                    ) : (
-                        <Ionicons name="person-circle" size={80} color="#008080"/>
-                    )}
-                    <Text style={styles.name}>{user?.name || "Juan Dela Cruz"}</Text>
-                    <Text style={styles.phone}>{user?.phone || "+63 000 000 0000"}</Text>
-                    <Text style={styles.phone}>{user?.email || "No Email Provided"}</Text>
+            {loading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#008080" />
+                    <Text style={styles.loadingText}>Loading profile...</Text>
                 </View>
+            ) : error ? (
+                <View style={styles.errorContainer}>
+                    <Ionicons name="alert-circle-outline" size={64} color="#E53935" />
+                    <Text style={styles.errorText}>{error}</Text>
+                    <TouchableOpacity 
+                        style={styles.retryButton}
+                        onPress={() => {
+                            setLoading(true);
+                            setError(null);
+                            // Re-fetch will be triggered by useEffect
+                        }}
+                    >
+                        <Text style={styles.retryText}>Retry</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                <ScrollView ref={scrollRef} contentContainerStyle={{paddingBottom: 120}}>
+                    {/* Header */}
+                    <View style={styles.header}>
+                        {providerProfile?.profile_photo ? (
+                            <Image 
+                                source={{uri: providerProfile.profile_photo}} 
+                                style={styles.profileImage}
+                            />
+                        ) : (
+                            <Ionicons name="person-circle" size={80} color="#008080"/>
+                        )}
+                        
+                        {/* Verification Badge */}
+                        {providerProfile?.is_verified && (
+                            <View style={styles.verificationBadge}>
+                                <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                                <Text style={styles.verifiedText}>Verified</Text>
+                            </View>
+                        )}
+                        
+                        {providerProfile?.verification_status === 'pending' && (
+                            <View style={[styles.verificationBadge, styles.pendingBadge]}>
+                                <Ionicons name="time-outline" size={20} color="#FF9800" />
+                                <Text style={[styles.verifiedText, styles.pendingText]}>Verification Pending</Text>
+                            </View>
+                        )}
+                        
+                        {providerProfile?.verification_status === 'rejected' && (
+                            <View style={[styles.verificationBadge, styles.rejectedBadge]}>
+                                <Ionicons name="close-circle" size={20} color="#E53935" />
+                                <Text style={[styles.verifiedText, styles.rejectedText]}>Verification Rejected</Text>
+                            </View>
+                        )}
 
-                {/* Menu Items */}
-                <View style={styles.menuList}>
-                    {restrictedItems.map((item) => renderMenuItem(item, true /* restricted */))}
-                    {alwaysAvailable.map((item) => renderMenuItem(item))}
-                </View>
-            </ScrollView>
+                        <Text style={styles.name}>
+                            {providerProfile?.full_name || `${providerProfile?.first_name} ${providerProfile?.last_name}`}
+                        </Text>
+                        <Text style={styles.phone}>{providerProfile?.phone_number || "+63 000 000 0000"}</Text>
+                        <Text style={styles.phone}>{providerProfile?.email || "No Email Provided"}</Text>
+                    </View>
+
+                    {/* Menu Items */}
+                    <View style={styles.menuList}>
+                        {restrictedItems.map((item) => renderMenuItem(item, true /* restricted */))}
+                        {alwaysAvailable.map((item) => renderMenuItem(item))}
+                    </View>
+                </ScrollView>
+            )}
 
             {/* Logout Modal */}
             <Modal transparent visible={showLogoutModal} animationType="none" onRequestClose={closeLogout}>
@@ -172,6 +254,44 @@ const styles = StyleSheet.create({
         color: "#333",
         fontFamily: "PoppinsSemiBold",
     },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingTop: 100,
+    },
+    loadingText: {
+        fontSize: 14,
+        color: "#666",
+        fontFamily: "PoppinsRegular",
+        marginTop: 12,
+    },
+    errorContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        paddingTop: 100,
+        paddingHorizontal: 40,
+    },
+    errorText: {
+        fontSize: 14,
+        color: "#E53935",
+        fontFamily: "PoppinsRegular",
+        textAlign: "center",
+        marginTop: 12,
+        marginBottom: 20,
+    },
+    retryButton: {
+        backgroundColor: "#008080",
+        paddingHorizontal: 24,
+        paddingVertical: 10,
+        borderRadius: 8,
+    },
+    retryText: {
+        color: "#fff",
+        fontSize: 14,
+        fontFamily: "PoppinsSemiBold",
+    },
     header: {
         alignItems: "center",
         marginTop: 20,
@@ -181,6 +301,38 @@ const styles = StyleSheet.create({
         width: 100,
         height: 100,
         borderRadius: 50,
+        marginBottom: 12,
+    },
+    verificationBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#E8F5E9",
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: "#4CAF50",
+    },
+    pendingBadge: {
+        backgroundColor: "#FFF3E0",
+        borderColor: "#FF9800",
+    },
+    rejectedBadge: {
+        backgroundColor: "#FFEBEE",
+        borderColor: "#E53935",
+    },
+    verifiedText: {
+        fontSize: 13,
+        color: "#4CAF50",
+        fontFamily: "PoppinsSemiBold",
+        marginLeft: 6,
+    },
+    pendingText: {
+        color: "#FF9800",
+    },
+    rejectedText: {
+        color: "#E53935",
     },
     name: {
         fontSize: 16,

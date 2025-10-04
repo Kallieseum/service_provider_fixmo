@@ -1,4 +1,4 @@
-const DEFAULT_BASE_URL = 'http://192.168.1.27:3000';
+const DEFAULT_BASE_URL = 'https://fixmo-backend1.vercel.app';
 
 // Allow overriding via Expo public env (set EXPO_PUBLIC_API_URL)
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_BASE_URL;

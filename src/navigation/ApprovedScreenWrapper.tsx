@@ -2,7 +2,7 @@ import React from "react";
 import {View, StyleSheet} from "react-native";
 import BottomTabs from "../navigation/BottomTabs";
 
-type TabKey = "home" | "task" | "calendar" | "chat" | "profile";
+type TabKey = "home" | "task" | "calendar" | "messages" | "myservices" | "profile" | "chat";
 
 type ApprovedScreenWrapperProps = {
     activeTab: TabKey;

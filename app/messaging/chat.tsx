@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { format, parseISO } from "date-fns";
-import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -20,38 +19,168 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { Socket } from "socket.io-client";
 import {
     getMessages,
     markMessagesAsRead,
     sendMessage,
 } from "../../src/api/messages.api";
+import { MessageService } from "../../src/utils/messageAPI";
 import type { Message } from "../../src/types/message";
 
 export default function ChatScreen() {
     const router = useRouter();
     const params = useLocalSearchParams();
     const flatListRef = useRef<FlatList>(null);
+    const socketRef = useRef<Socket | null>(null);
 
     const conversationId = parseInt(params.conversationId as string);
     const customerId = parseInt(params.customerId as string);
     const customerName = params.customerName as string;
     const customerPhone = params.customerPhone as string;
     const customerPhoto = params.customerPhoto as string;
+    const appointmentStatus = params.appointmentStatus as string;
+    const isReadOnly = appointmentStatus === 'completed';
 
     const [messages, setMessages] = useState<Message[]>([]);
     const [loading, setLoading] = useState(true);
     const [sending, setSending] = useState(false);
     const [messageText, setMessageText] = useState("");
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+    const [isConnected, setIsConnected] = useState(false);
+    const [providerId, setProviderId] = useState<number | null>(null);
 
     useEffect(() => {
-        fetchMessages();
+        initializeMessaging();
+        return () => {
+            // Cleanup on unmount
+            if (socketRef.current) {
+                console.log('🧹 Cleaning up socket connection');
+                const messageAPI = MessageService.getInstance();
+                if (messageAPI) {
+                    messageAPI.leaveConversation(socketRef.current, conversationId);
+                }
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
+        };
     }, []);
 
     useEffect(() => {
-        // Mark messages as read when component mounts or messages change
+        // Mark messages as read when messages change
         markUnreadMessages();
     }, [messages]);
+
+    const initializeMessaging = async () => {
+        try {
+            const token = await AsyncStorage.getItem("providerToken");
+            const storedProviderId = await AsyncStorage.getItem("provider_id");
+            
+            if (!token) {
+                Alert.alert("Error", "Authentication required. Please log in again.");
+                router.back();
+                return;
+            }
+
+            if (storedProviderId) {
+                setProviderId(parseInt(storedProviderId));
+            }
+
+            // Initialize MessageService
+            let messageAPI = MessageService.getInstance();
+            if (!messageAPI) {
+                messageAPI = MessageService.initialize(token);
+            }
+
+            // Fetch initial messages
+            await fetchMessages();
+
+            // Setup Socket.IO for real-time updates
+            setupSocketIO(messageAPI, parseInt(storedProviderId || '0'));
+        } catch (error: any) {
+            console.error('Initialization error:', error);
+            Alert.alert("Error", "Failed to initialize messaging");
+        }
+    };
+
+    const setupSocketIO = (messageAPI: any, userId: number) => {
+        console.log('🔌 Setting up Socket.IO...');
+        
+        // Create Socket.IO connection
+        const socket = messageAPI.createSocketIOConnection();
+        socketRef.current = socket;
+
+        // Store socket in service
+        MessageService.setSocket(socket);
+
+        // Connection events
+        socket.on('connect', () => {
+            console.log('✅ Socket connected');
+            setIsConnected(true);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('🔌 Socket disconnected');
+            setIsConnected(false);
+        });
+
+        socket.on('authenticated', (data: any) => {
+            console.log('✅ Socket authenticated:', data);
+            // Join this conversation room
+            messageAPI.joinConversation(socket, conversationId, userId, 'provider');
+        });
+
+        socket.on('joined_conversation', (data: any) => {
+            console.log('✅ Joined conversation:', data);
+        });
+
+        // Listen for new messages
+        socket.on('new_message', (data: any) => {
+            console.log('📨 New message received:', data);
+            if (data.message && data.message.conversation_id === conversationId) {
+                setMessages((prev) => {
+                    // Avoid duplicates
+                    if (prev.some(msg => msg.message_id === data.message.message_id)) {
+                        return prev;
+                    }
+                    return [...prev, data.message];
+                });
+
+                // Auto-scroll to bottom
+                setTimeout(() => {
+                    flatListRef.current?.scrollToEnd({ animated: true });
+                }, 100);
+
+                // Auto-mark as read if from customer
+                if (data.message.sender_type === 'customer') {
+                    markSingleMessageAsRead(data.message.message_id);
+                }
+            }
+        });
+
+        // Listen for message read events
+        socket.on('message_read', (data: any) => {
+            console.log('✅ Message read:', data);
+            if (data.messageId) {
+                setMessages((prev) =>
+                    prev.map((msg) =>
+                        msg.message_id === data.messageId
+                            ? { ...msg, is_read: true }
+                            : msg
+                    )
+                );
+            }
+        });
+
+        socket.on('authentication_failed', (error: any) => {
+            console.error('❌ Socket authentication failed:', error);
+            Alert.alert('Connection Error', 'Failed to authenticate messaging connection');
+        });
+
+        socket.on('join_conversation_failed', (error: any) => {
+            console.error('❌ Failed to join conversation:', error);
+        });
+    };
 
     const fetchMessages = useCallback(async () => {
         try {
@@ -95,12 +224,30 @@ export default function ChatScreen() {
             if (unreadMessages.length > 0) {
                 const messageIds = unreadMessages.map((msg) => msg.message_id);
                 await markMessagesAsRead(conversationId, messageIds, token);
+                
+                // Update local state
+                setMessages(prev => prev.map(msg => 
+                    unreadMessages.some(um => um.message_id === msg.message_id)
+                        ? { ...msg, is_read: true }
+                        : msg
+                ));
             }
         } catch (error) {
             // Fail silently for read receipts
             console.error("Mark as read error:", error);
         }
     }, [messages, conversationId]);
+
+    const markSingleMessageAsRead = async (messageId: number) => {
+        try {
+            const token = await AsyncStorage.getItem("providerToken");
+            if (!token) return;
+
+            await markMessagesAsRead(conversationId, [messageId], token);
+        } catch (error) {
+            console.error("Mark single message as read error:", error);
+        }
+    };
 
     const handleSendMessage = async () => {
         if (!messageText.trim() && !replyingTo) return;
@@ -162,21 +309,6 @@ export default function ChatScreen() {
         }
     };
 
-    const handleDocumentPicker = async () => {
-        try {
-            const result = await DocumentPicker.getDocumentAsync({
-                type: "*/*",
-                copyToCacheDirectory: true,
-            });
-
-            if (!result.canceled && result.assets && result.assets[0]) {
-                await sendDocumentMessage(result.assets[0]);
-            }
-        } catch (error: any) {
-            Alert.alert("Error", error.message || "Failed to pick document");
-        }
-    };
-
     const sendImageMessage = async (image: any) => {
         setSending(true);
         try {
@@ -208,42 +340,6 @@ export default function ChatScreen() {
             }, 100);
         } catch (error: any) {
             Alert.alert("Error", error.message || "Failed to send image");
-        } finally {
-            setSending(false);
-        }
-    };
-
-    const sendDocumentMessage = async (document: any) => {
-        setSending(true);
-        try {
-            const token = await AsyncStorage.getItem("providerToken");
-            if (!token) {
-                Alert.alert("Error", "Authentication required");
-                return;
-            }
-
-            const attachment = {
-                uri: document.uri,
-                name: document.name,
-                type: document.mimeType || "application/octet-stream",
-            };
-
-            const response = await sendMessage(
-                conversationId,
-                `Sent a document: ${document.name}`,
-                token,
-                "document",
-                undefined,
-                attachment
-            );
-
-            setMessages((prev) => [...prev, response.data]);
-
-            setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-            }, 100);
-        } catch (error: any) {
-            Alert.alert("Error", error.message || "Failed to send document");
         } finally {
             setSending(false);
         }
@@ -415,9 +511,16 @@ export default function ChatScreen() {
                             </View>
                         )}
                         <View style={styles.headerInfo}>
-                            <Text style={styles.headerName} numberOfLines={1}>
-                                {customerName}
-                            </Text>
+                            <View style={styles.headerNameRow}>
+                                <Text style={styles.headerName} numberOfLines={1}>
+                                    {customerName}
+                                </Text>
+                                {isConnected && (
+                                    <View style={styles.connectionIndicator}>
+                                        <View style={styles.connectionDot} />
+                                    </View>
+                                )}
+                            </View>
                             {customerPhone && (
                                 <Text style={styles.headerPhone}>{customerPhone}</Text>
                             )}
@@ -459,50 +562,63 @@ export default function ChatScreen() {
                     </View>
                 )}
 
-                {/* Input Bar */}
-                <View style={styles.inputContainer}>
-                    <TouchableOpacity
-                        onPress={handleImagePicker}
-                        style={styles.attachButton}
-                        disabled={sending}
-                    >
-                        <Ionicons name="image" size={24} color="#1e6355" />
-                    </TouchableOpacity>
+                {/* Read-Only Banner */}
+                {isReadOnly && (
+                    <View style={styles.readOnlyBanner}>
+                        <View style={styles.readOnlyContent}>
+                            <Ionicons name="lock-closed" size={16} color="#856404" style={{ marginRight: 8 }} />
+                            <Text style={styles.readOnlyText}>
+                                This conversation is read-only (Appointment completed)
+                            </Text>
+                        </View>
+                    </View>
+                )}
 
-                    <TouchableOpacity
-                        onPress={handleDocumentPicker}
-                        style={styles.attachButton}
-                        disabled={sending}
-                    >
-                        <Ionicons name="attach" size={24} color="#1e6355" />
-                    </TouchableOpacity>
+                {/* Input Bar - Conditional based on read-only status */}
+                {isReadOnly ? (
+                    <View style={styles.readOnlyInputContainer}>
+                        <Ionicons name="lock-closed-outline" size={18} color="#6c757d" style={{ marginRight: 8 }} />
+                        <Text style={styles.readOnlyInputText}>
+                            Messaging disabled for completed appointments
+                        </Text>
+                    </View>
+                ) : (
+                    <View style={styles.inputContainer}>
+                        <TouchableOpacity
+                            onPress={handleImagePicker}
+                            style={styles.attachButton}
+                            disabled={sending}
+                        >
+                            <Ionicons name="image" size={24} color="#1e6355" />
+                        </TouchableOpacity>
 
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Type a message..."
-                        placeholderTextColor="#999"
-                        value={messageText}
-                        onChangeText={setMessageText}
-                        multiline
-                        maxLength={1000}
-                        editable={!sending}
-                    />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Type a message..."
+                            placeholderTextColor="#999"
+                            value={messageText}
+                            onChangeText={setMessageText}
+                            multiline
+                            maxLength={1000}
+                            editable={!sending}
+                        />
 
-                    <TouchableOpacity
-                        onPress={handleSendMessage}
-                        style={[
-                            styles.sendButton,
-                            (!messageText.trim() || sending) && styles.sendButtonDisabled,
-                        ]}
-                        disabled={!messageText.trim() || sending}
-                    >
-                        {sending ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                            <Ionicons name="send" size={20} color="#fff" />
-                        )}
-                    </TouchableOpacity>
-                </View>
+                        <TouchableOpacity
+                            onPress={handleSendMessage}
+                            style={[
+                                styles.sendButton,
+                                (!messageText.trim() || sending) && styles.sendButtonDisabled,
+                            ]}
+                            disabled={!messageText.trim() || sending}
+                        >
+                            {sending ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <Ionicons name="send" size={20} color="#fff" />
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                )}
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
@@ -560,10 +676,23 @@ const styles = StyleSheet.create({
     headerInfo: {
         flex: 1,
     },
+    headerNameRow: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
     headerName: {
         fontSize: 16,
         fontWeight: "600",
         color: "#000",
+    },
+    connectionIndicator: {
+        marginLeft: 6,
+    },
+    connectionDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: "#4CAF50",
     },
     headerPhone: {
         fontSize: 12,
@@ -731,5 +860,38 @@ const styles = StyleSheet.create({
     },
     sendButtonDisabled: {
         backgroundColor: "#ccc",
+    },
+    readOnlyBanner: {
+        backgroundColor: '#fff3cd',
+        borderBottomWidth: 1,
+        borderBottomColor: '#ffc107',
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+    },
+    readOnlyContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    readOnlyText: {
+        color: '#856404',
+        fontSize: 14,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    readOnlyInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        backgroundColor: '#f8f9fa',
+        borderTopWidth: 0.5,
+        borderTopColor: '#dee2e6',
+    },
+    readOnlyInputText: {
+        color: '#6c757d',
+        fontSize: 14,
+        fontStyle: 'italic',
     },
 });

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { format, parseISO } from "date-fns";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
@@ -16,19 +16,33 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { Socket } from "socket.io-client";
 import { getConversations } from "../../src/api/messages.api";
+import { MessageService } from "../../src/utils/messageAPI";
 import type { Conversation } from "../../src/types/message";
 
 export default function MessagesListScreen() {
     const router = useRouter();
+    const socketRef = useRef<Socket | null>(null);
+    
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [isConnected, setIsConnected] = useState(false);
 
     useEffect(() => {
-        fetchConversations();
+        initializeMessaging();
+
+        return () => {
+            // Cleanup on unmount
+            if (socketRef.current) {
+                console.log('🧹 Disconnecting socket from messages list');
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
+        };
     }, []);
 
     useEffect(() => {
@@ -48,6 +62,124 @@ export default function MessagesListScreen() {
         }
     }, [searchQuery, conversations]);
 
+    const initializeMessaging = async () => {
+        const token = await AsyncStorage.getItem("providerToken");
+        const providerId = await AsyncStorage.getItem("provider_id");
+
+        if (!token) {
+            Alert.alert("Error", "Authentication required. Please log in again.");
+            return;
+        }
+
+        // Initialize MessageService
+        let messageAPI = MessageService.getInstance();
+        if (!messageAPI) {
+            messageAPI = MessageService.initialize(token);
+        }
+
+        // Fetch conversations
+        await fetchConversations();
+
+        // Setup Socket.IO for real-time updates
+        setupSocketIO(messageAPI, parseInt(providerId || '0'));
+    };
+
+    const setupSocketIO = (messageAPI: any, userId: number) => {
+        console.log('🔌 Setting up Socket.IO for conversations list...');
+        
+        // Create or reuse Socket.IO connection
+        let socket = MessageService.getSocket();
+        if (!socket || !socket.connected) {
+            socket = messageAPI.createSocketIOConnection();
+            if (socket) {
+                MessageService.setSocket(socket);
+            }
+        }
+        
+        if (!socket) {
+            console.error('Failed to create socket connection');
+            return;
+        }
+        
+        socketRef.current = socket;
+
+        // Connection events
+        socket.on('connect', () => {
+            console.log('✅ Conversations list: Socket connected');
+            setIsConnected(true);
+        });
+
+        socket.on('disconnect', () => {
+            console.log('🔌 Conversations list: Socket disconnected');
+            setIsConnected(false);
+        });
+
+        socket.on('authenticated', (data: any) => {
+            console.log('✅ Conversations list: Socket authenticated:', data);
+        });
+
+        // Listen for new messages in any conversation
+        socket.on('new_message', (data: any) => {
+            console.log('📨 New message in conversations list:', data);
+            if (data.message) {
+                updateConversationWithNewMessage(data.message);
+            }
+        });
+
+        // Listen for message read events
+        socket.on('message_read', (data: any) => {
+            if (data.conversationId) {
+                // Optionally update unread count
+                updateConversationReadStatus(data.conversationId, data.messageId);
+            }
+        });
+
+        socket.on('authentication_failed', (error: any) => {
+            console.error('❌ Socket authentication failed:', error);
+        });
+    };
+
+    const updateConversationWithNewMessage = (message: any) => {
+        setConversations((prev) => {
+            // Find the conversation
+            const updated = prev.map((conv) => {
+                if (conv.conversation_id === message.conversation_id) {
+                    return {
+                        ...conv,
+                        last_message: message,
+                        last_message_at: message.created_at,
+                        unread_count: message.sender_type === 'customer' 
+                            ? conv.unread_count + 1 
+                            : conv.unread_count,
+                    };
+                }
+                return conv;
+            });
+
+            // Sort by last_message_at
+            return updated.sort((a, b) => {
+                const dateA = a.last_message_at || a.updated_at;
+                const dateB = b.last_message_at || b.updated_at;
+                return new Date(dateB).getTime() - new Date(dateA).getTime();
+            });
+        });
+    };
+
+    const updateConversationReadStatus = (conversationId: number, messageId: number) => {
+        setConversations((prev) =>
+            prev.map((conv) => {
+                if (conv.conversation_id === conversationId) {
+                    // Decrease unread count if message was unread
+                    return {
+                        ...conv,
+                        unread_count: Math.max(0, conv.unread_count - 1),
+                    };
+                }
+                return conv;
+            })
+        );
+    };
+
     const fetchConversations = useCallback(async () => {
         try {
             const token = await AsyncStorage.getItem("providerToken");
@@ -56,7 +188,21 @@ export default function MessagesListScreen() {
                 return;
             }
 
+            console.log('📥 Fetching conversations...');
             const data = await getConversations(token, 1, 50, true);
+            console.log('📊 Received conversations:', data.length);
+            
+            // Log first conversation for debugging
+            if (data.length > 0) {
+                console.log('🔍 First conversation sample:', {
+                    conversation_id: data[0].conversation_id,
+                    customer_id: data[0].customer_id,
+                    provider_id: data[0].provider_id,
+                    has_customer: !!data[0].customer,
+                    customer_name: data[0].customer ? `${data[0].customer.first_name} ${data[0].customer.last_name}` : 'N/A',
+                    status: data[0].status
+                });
+            }
             
             // Sort by last_message_at or updated_at, most recent first
             const sorted = data.sort((a, b) => {
@@ -68,6 +214,7 @@ export default function MessagesListScreen() {
             setConversations(sorted);
             setFilteredConversations(sorted);
         } catch (error: any) {
+            console.error('❌ Error fetching conversations:', error);
             Alert.alert("Error", error.message || "Failed to load conversations");
         } finally {
             setLoading(false);
@@ -81,17 +228,76 @@ export default function MessagesListScreen() {
     };
 
     const openConversation = (conversation: Conversation) => {
+        console.log('🔍 Opening conversation:', {
+            conversation_id: conversation.conversation_id,
+            customer_id: conversation.customer_id,
+            provider_id: conversation.provider_id,
+            customer: conversation.customer,
+            participant: conversation.participant,
+            status: conversation.status,
+            fullConversation: conversation
+        });
+
+        // Validate required data before navigation
+        if (!conversation.conversation_id) {
+            console.error('❌ Missing conversation_id');
+            Alert.alert("Error", "Invalid conversation data: Missing conversation ID");
+            return;
+        }
+
+        // Handle both 'customer' and 'participant' fields (API might return either)
+        const customerData = conversation.customer || conversation.participant;
+        
+        if (!customerData) {
+            console.error('❌ Missing customer/participant data');
+            Alert.alert("Error", "Invalid conversation data: Missing customer information");
+            return;
+        }
+
+        // Extract customer_id from the customer object if not directly provided
+        let customerId = conversation.customer_id;
+        if (!customerId && customerData && 'user_id' in customerData) {
+            customerId = customerData.user_id;
+            console.log('✅ Extracted customer_id from customer.user_id:', customerId);
+        }
+
+        if (!customerId) {
+            console.error('❌ Missing customer_id and could not extract from customer object');
+            Alert.alert("Error", "Invalid conversation data: Missing customer ID");
+            return;
+        }
+
+        // Extract customer name from either structure
+        let customerName = "Customer";
+        let customerPhone = "";
+        let customerPhoto = "";
+
+        if ('first_name' in customerData) {
+            // CustomerProfile format
+            customerName = `${customerData.first_name} ${customerData.last_name}`;
+            customerPhone = customerData.phone_number || "";
+            customerPhoto = customerData.profile_photo || "";
+        } else if ('provider_first_name' in customerData) {
+            // If participant is actually provider data (shouldn't happen but handle it)
+            customerName = `${customerData.provider_first_name} ${customerData.provider_last_name}`;
+            customerPhone = customerData.provider_phone_number || "";
+            customerPhoto = customerData.provider_profile_photo || "";
+        }
+
+        const params = {
+            conversationId: conversation.conversation_id.toString(),
+            customerId: customerId.toString(),
+            customerName,
+            customerPhone,
+            customerPhoto,
+            appointmentStatus: conversation.appointment_status || 'active',
+        };
+
+        console.log('📤 Navigating with params:', params);
+
         router.push({
             pathname: "/messaging/chat",
-            params: {
-                conversationId: conversation.conversation_id.toString(),
-                customerId: conversation.customer_id.toString(),
-                customerName: conversation.customer
-                    ? `${conversation.customer.first_name} ${conversation.customer.last_name}`
-                    : "Customer",
-                customerPhone: conversation.customer?.phone_number || "",
-                customerPhoto: conversation.customer?.profile_photo || "",
-            },
+            params,
         });
     };
 
@@ -117,9 +323,23 @@ export default function MessagesListScreen() {
     };
 
     const renderConversationItem = ({ item }: { item: Conversation }) => {
-        const customerName = item.customer
-            ? `${item.customer.first_name} ${item.customer.last_name}`
-            : "Customer";
+        // Handle both 'customer' and 'participant' fields
+        const customerData = item.customer || item.participant;
+        
+        let customerName = "Customer";
+        let customerPhoto: string | undefined;
+
+        if (customerData) {
+            if ('first_name' in customerData) {
+                customerName = `${customerData.first_name} ${customerData.last_name}`;
+                customerPhoto = customerData.profile_photo;
+            } else if ('provider_first_name' in customerData) {
+                // If participant is provider data (edge case)
+                customerName = `${customerData.provider_first_name} ${customerData.provider_last_name}`;
+                customerPhoto = customerData.provider_profile_photo;
+            }
+        }
+
         const lastMessage = item.last_message?.content || "No messages yet";
         const unreadCount = item.unread_count || 0;
         const timestamp = formatTimestamp(item.last_message_at || item.updated_at);
@@ -132,9 +352,9 @@ export default function MessagesListScreen() {
                 activeOpacity={0.7}
             >
                 <View style={styles.avatarContainer}>
-                    {item.customer?.profile_photo ? (
+                    {customerPhoto ? (
                         <Image
-                            source={{ uri: item.customer.profile_photo }}
+                            source={{ uri: customerPhoto }}
                             style={styles.avatar}
                         />
                     ) : (
@@ -218,13 +438,18 @@ export default function MessagesListScreen() {
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity
-                    onPress={() => router.back()}
+                    onPress={() => router.push('/provider/onboarding/pre_homepage')}
                     style={styles.backButton}
                 >
                     <Ionicons name="arrow-back" size={24} color="#000" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Messages</Text>
-                <View style={{ width: 24 }} />
+                {isConnected && (
+                    <View style={styles.connectionIndicator}>
+                        <View style={styles.connectionDot} />
+                    </View>
+                )}
+                {!isConnected && <View style={{ width: 24 }} />}
             </View>
 
             {/* Search Bar */}
@@ -308,6 +533,18 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: "600",
         color: "#000",
+    },
+    connectionIndicator: {
+        width: 24,
+        height: 24,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    connectionDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: "#4CAF50",
     },
     searchContainer: {
         flexDirection: "row",
