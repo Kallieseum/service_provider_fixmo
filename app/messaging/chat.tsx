@@ -25,8 +25,8 @@ import {
     markMessagesAsRead,
     sendMessage,
 } from "../../src/api/messages.api";
-import { MessageService } from "../../src/utils/messageAPI";
 import type { Message } from "../../src/types/message";
+import { MessageService } from "../../src/utils/messageAPI";
 
 export default function ChatScreen() {
     const router = useRouter();

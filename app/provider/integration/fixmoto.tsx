@@ -19,9 +19,9 @@ import {
 import MapView, { Marker } from "react-native-maps";
 import { completeAppointment, getAppointmentsByProviderId, startEnRoute } from "../../../src/api/booking.api";
 import CompleteServiceModal from "../../../src/components/modals/CompleteServiceModal";
+import { API_CONFIG } from "../../../src/constants/config";
 import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
 import type { Appointment } from "../../../src/types/appointment";
-import { API_CONFIG } from "../../../src/constants/config";
 
 if (Platform.OS === "android") {
     UIManager.setLayoutAnimationEnabledExperimental?.(true);

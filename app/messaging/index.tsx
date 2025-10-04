@@ -18,8 +18,8 @@ import {
 } from "react-native";
 import { Socket } from "socket.io-client";
 import { getConversations } from "../../src/api/messages.api";
-import { MessageService } from "../../src/utils/messageAPI";
 import type { Conversation } from "../../src/types/message";
+import { MessageService } from "../../src/utils/messageAPI";
 
 export default function MessagesListScreen() {
     const router = useRouter();
