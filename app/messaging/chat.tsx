@@ -13,12 +13,14 @@ import {
     Linking,
     Platform,
     SafeAreaView,
+    StatusBar,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Socket } from "socket.io-client";
 import {
     getMessages,
@@ -30,6 +32,7 @@ import { MessageService } from "../../src/utils/messageAPI";
 
 export default function ChatScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const flatListRef = useRef<FlatList>(null);
     const socketRef = useRef<Socket | null>(null);
@@ -475,9 +478,10 @@ export default function ChatScreen() {
 
     if (loading) {
         return (
-            <SafeAreaView style={styles.container}>
+            <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar barStyle="dark-content" />
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#1e6355" />
+                    <ActivityIndicator size="large" color="#00796B" />
                     <Text style={styles.loadingText}>Loading messages...</Text>
                 </View>
             </SafeAreaView>
@@ -485,7 +489,8 @@ export default function ChatScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+            <StatusBar barStyle="dark-content" />
             <KeyboardAvoidingView
                 style={styles.container}
                 behavior={Platform.OS === "ios" ? "padding" : undefined}

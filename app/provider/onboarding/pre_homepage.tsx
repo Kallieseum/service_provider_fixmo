@@ -2,12 +2,13 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format, parseISO } from "date-fns";
 import { useFonts } from "expo-font";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    BackHandler,
     Modal,
     Pressable,
     ScrollView,
@@ -24,12 +25,15 @@ import { getAppointmentsByProviderId } from "../../../src/api/booking.api";
 import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
 import type { Appointment } from "../../../src/types/appointment";
 import type { Availability } from "../../../src/types/availability";
-import OngoingServiceDetails from "../../provider/integration/ongoing-service-details";
 
 // Prevent auto-hide with error handling
-SplashScreen.preventAutoHideAsync().catch(() => {
-    console.warn('SplashScreen.preventAutoHideAsync() failed');
-});
+// Only call if the native module is available
+try {
+    SplashScreen.preventAutoHideAsync();
+} catch (error) {
+    // Native module not available, splash screen will auto-hide
+    console.warn('SplashScreen.preventAutoHideAsync() not available:', error);
+}
 
 type ScheduledWork = {
     status: "scheduled" | "ongoing" | "finished";
@@ -43,7 +47,6 @@ export default function Homepage() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const params = useLocalSearchParams();
-    const [modalVisible, setModalVisible] = useState(false);
     const [profileLoading, setProfileLoading] = useState(true);
     const [providerProfile, setProviderProfile] = useState<ProviderProfile | null>(null);
     const [ongoingAppointment, setOngoingAppointment] = useState<Appointment | null>(null);
@@ -55,6 +58,21 @@ export default function Homepage() {
         PoppinsBold: require("../../assets/fonts/Poppins-Bold.ttf"),
         PoppinsSemiBold: require("../../assets/fonts/Poppins-SemiBold.ttf"),
     });
+
+    // Prevent back navigation - this is the root screen after login
+    useFocusEffect(
+        useCallback(() => {
+            const onBackPress = () => {
+                // Return true to prevent default back action
+                // This prevents going back to signin/otp screens
+                return true;
+            };
+
+            const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+
+            return () => subscription.remove();
+        }, [])
+    );
 
     // Fetch provider profile on mount
     useEffect(() => {
@@ -167,7 +185,8 @@ export default function Homepage() {
                 try {
                     await SplashScreen.hideAsync();
                 } catch (error) {
-                    console.warn('SplashScreen.hideAsync() failed:', error);
+                    // Native module not available or already hidden
+                    console.log('SplashScreen.hideAsync() not available');
                 }
             }
         }
@@ -351,7 +370,7 @@ export default function Homepage() {
                             </Text>
                         </View>
                     ) : appointment ? (
-                        <TouchableOpacity onPress={() => setModalVisible(true)}>
+                        <TouchableOpacity onPress={() => router.push('/provider/integration/fixmoto')}>
                             <View style={styles.appointmentBox}>
                                 <View
                                     style={[styles.statusTag, {backgroundColor: statusColors[appointment.appointment_status] || "#777"}]}>
@@ -472,18 +491,6 @@ export default function Homepage() {
                 </View>
             </ScrollView>
 
-            {/* Modal for Ongoing Service */}
-            <Modal animationType="slide" transparent visible={modalVisible}
-                   onRequestClose={() => setModalVisible(false)}>
-                <View style={styles.modalBackground}>
-                    <View style={styles.modalCard}>
-                        <Pressable style={styles.closeBtn} onPress={() => setModalVisible(false)}>
-                            <Ionicons name="close" size={22} color="#333"/>
-                        </Pressable>
-                        <OngoingServiceDetails/>
-                    </View>
-                </View>
-            </Modal>
         </ApprovedScreenWrapper>
     );
 }

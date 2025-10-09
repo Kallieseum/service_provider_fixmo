@@ -15,6 +15,7 @@ import {
     RefreshControl,
     SafeAreaView,
     ScrollView,
+    StatusBar,
     StyleSheet,
     Switch,
     Text,
@@ -22,6 +23,7 @@ import {
     TouchableOpacity,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
     getProviderServices,
@@ -48,6 +50,7 @@ const certificateServices: CertificateService[] = certificateServicesJson;
 
 export default function MyServices() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -79,7 +82,21 @@ export default function MyServices() {
             }
 
             const data = await getProviderServices(token);
-            setServices(data);
+            
+            // Ensure servicelisting_isActive is properly converted to boolean
+            const normalizedData = data.map(service => ({
+                ...service,
+                servicelisting_isActive: Boolean(service.servicelisting_isActive)
+            }));
+            
+            console.log('Fetched services:', normalizedData.map(s => ({
+                id: s.service_id,
+                title: s.service_title,
+                isActive: s.servicelisting_isActive,
+                isActiveType: typeof s.servicelisting_isActive
+            })));
+            
+            setServices(normalizedData);
             setLoading(false);
             setRefreshing(false);
         } catch (error: any) {
@@ -102,20 +119,28 @@ export default function MyServices() {
                 return;
             }
 
+            console.log('Toggling service:', service.service_id, 'Current status:', service.servicelisting_isActive);
+
             const result = await toggleServiceAvailability(service.service_id, token);
+
+            console.log('Toggle result:', result);
+
+            // Ensure the returned value is a proper boolean
+            const newIsActive = Boolean(result.servicelisting_isActive);
 
             // Update local state with the new status from backend
             setServices(services.map(s => 
                 s.service_id === service.service_id 
-                    ? { ...s, servicelisting_isActive: result.servicelisting_isActive }
+                    ? { ...s, servicelisting_isActive: newIsActive }
                     : s
             ));
 
             Alert.alert(
                 "Success",
-                `Service ${result.servicelisting_isActive ? "activated" : "deactivated"} successfully!`
+                `Service ${newIsActive ? "activated" : "deactivated"} successfully!`
             );
         } catch (error: any) {
+            console.error('Toggle error:', error);
             Alert.alert("Error", error.message || "Failed to update service status");
         }
     };
@@ -207,7 +232,8 @@ export default function MyServices() {
 
     if (!fontsLoaded || loading) {
         return (
-            <SafeAreaView style={styles.container}>
+            <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar barStyle="dark-content" />
                 <ActivityIndicator size="large" color="#1e6355" />
                 <Text style={styles.loadingText}>Loading services...</Text>
             </SafeAreaView>
@@ -215,15 +241,14 @@ export default function MyServices() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+            <StatusBar barStyle="dark-content" />
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.push("/provider/onboarding/pre_homepage")}>
+                <TouchableOpacity onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={24} color="#000" />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => router.push("/provider/onboarding/services")}>
-                    <Text style={styles.headerTitle}>My Services</Text>
-                </TouchableOpacity>
+                <Text style={styles.headerTitle}>My Services</Text>
                 <View style={{ width: 24 }} />
             </View>
 
@@ -283,13 +308,19 @@ export default function MyServices() {
                                         showsHorizontalScrollIndicator={false}
                                         style={styles.imagesContainer}
                                     >
-                                        {service.service_photos.map((photo, index) => (
-                                            <Image
-                                                key={index}
-                                                source={{ uri: photo }}
-                                                style={styles.serviceImage}
-                                            />
-                                        ))}
+                                        {service.service_photos
+                                            .filter((photo) => photo && typeof photo === 'string' && photo.trim() !== '')
+                                            .map((photo, index) => (
+                                                <Image
+                                                    key={index}
+                                                    source={{ uri: photo }}
+                                                    style={styles.serviceImage}
+                                                    onError={(error) => {
+                                                        console.log('Image load error:', error.nativeEvent.error);
+                                                    }}
+                                                />
+                                            ))
+                                        }
                                     </ScrollView>
                                 )}
 

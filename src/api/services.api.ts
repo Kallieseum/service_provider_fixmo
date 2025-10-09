@@ -185,12 +185,19 @@ export const toggleServiceAvailability = async (
     );
 
     const data = await response.json();
+    
+    console.log('Toggle API raw response:', data);
 
     if (!response.ok) {
       throw new Error(data.message || 'Failed to toggle service availability');
     }
 
-    return data.data;
+    // Backend returns the full service object, not wrapped in data
+    // Extract just what we need
+    return {
+      service_id: data.service_id,
+      servicelisting_isActive: data.servicelisting_isActive
+    };
   } catch (error: any) {
     console.error('Toggle Service Availability Error:', error);
     throw new Error(error.message || 'Network error. Please try again.');

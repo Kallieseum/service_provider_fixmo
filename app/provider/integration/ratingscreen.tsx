@@ -1,12 +1,17 @@
-import React, {useEffect, useState} from "react";
+import React, {useCallback, useEffect, useState} from "react";
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
+    SafeAreaView,
+    TouchableOpacity,
+    BackHandler,
 } from "react-native";
 import {Ionicons} from "@expo/vector-icons";
 import {useUserContext} from "@/context/UserContext";
+import {useFocusEffect, useRouter} from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type ServiceRating = {
     service: string;
@@ -16,8 +21,23 @@ type ServiceRating = {
 };
 
 export default function RatingScreen() {
+    const router = useRouter();
+    const insets = useSafeAreaInsets();
     const {user} = useUserContext();
     const [ratingsData, setRatingsData] = useState<ServiceRating[]>([]);
+
+    // Prevent going back to OTP screen - navigate to profile instead
+    useFocusEffect(
+        useCallback(() => {
+            const onBackPress = () => {
+                router.replace('/provider/onboarding/providerprofile');
+                return true; // Prevent default back action
+            };
+
+            const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+            return () => subscription.remove();
+        }, [])
+    );
 
     useEffect(() => {
         const mock: ServiceRating[] = [
@@ -78,7 +98,15 @@ export default function RatingScreen() {
     };
 
     return (
-        <View style={styles.container}>
+        <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+            {/* Back Button */}
+            <TouchableOpacity 
+                style={styles.backButton} 
+                onPress={() => router.replace('/provider/onboarding/providerprofile')}
+            >
+                <Ionicons name="arrow-back" size={24} color="#333" />
+            </TouchableOpacity>
+
             {/* Fixed Header */}
             <View style={styles.headerContainer}>
                 <Text style={styles.header}>Ratings</Text>
@@ -115,7 +143,7 @@ export default function RatingScreen() {
                     </View>
                 ))}
             </ScrollView>
-        </View>
+        </SafeAreaView>
     );
 }
 
@@ -123,6 +151,20 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#fff",
+    },
+    backButton: {
+        position: 'absolute',
+        top: 10,
+        left: 20,
+        zIndex: 10,
+        padding: 8,
+        backgroundColor: '#fff',
+        borderRadius: 20,
+        shadowColor: "#000",
+        shadowOffset: {width: 0, height: 2},
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
     },
     headerContainer: {
         paddingHorizontal: 20,

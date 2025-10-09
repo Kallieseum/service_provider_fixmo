@@ -10,12 +10,14 @@ import {
     Image,
     RefreshControl,
     SafeAreaView,
+    StatusBar,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Socket } from "socket.io-client";
 import { getConversations } from "../../src/api/messages.api";
 import type { Conversation } from "../../src/types/message";
@@ -23,6 +25,7 @@ import { MessageService } from "../../src/utils/messageAPI";
 
 export default function MessagesListScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const socketRef = useRef<Socket | null>(null);
     
     const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -424,9 +427,10 @@ export default function MessagesListScreen() {
 
     if (loading) {
         return (
-            <SafeAreaView style={styles.container}>
+            <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar barStyle="dark-content" />
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#1e6355" />
+                    <ActivityIndicator size="large" color="#00796B" />
                     <Text style={styles.loadingText}>Loading conversations...</Text>
                 </View>
             </SafeAreaView>
@@ -434,11 +438,12 @@ export default function MessagesListScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+            <StatusBar barStyle="dark-content" />
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity
-                    onPress={() => router.push('/provider/onboarding/pre_homepage')}
+                    onPress={() => router.replace('/provider/onboarding/pre_homepage')}
                     style={styles.backButton}
                 >
                     <Ionicons name="arrow-back" size={24} color="#000" />
