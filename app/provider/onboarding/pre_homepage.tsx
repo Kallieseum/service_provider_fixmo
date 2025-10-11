@@ -9,19 +9,19 @@ import {
     ActivityIndicator,
     Alert,
     BackHandler,
-    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { getDetailedProviderProfile, ProviderProfile } from "../../../src/api/auth.api";
 import { getProviderAvailability } from "../../../src/api/availability.api";
 import { getAppointmentsByProviderId } from "../../../src/api/booking.api";
+import { useNotifications } from "../../../src/context/NotificationContext";
 import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
 import type { Appointment } from "../../../src/types/appointment";
 import type { Availability } from "../../../src/types/availability";
@@ -47,6 +47,7 @@ export default function Homepage() {
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const params = useLocalSearchParams();
+    const { unreadCount, refreshUnreadCount } = useNotifications();
     const [profileLoading, setProfileLoading] = useState(true);
     const [providerProfile, setProviderProfile] = useState<ProviderProfile | null>(null);
     const [ongoingAppointment, setOngoingAppointment] = useState<Appointment | null>(null);
@@ -178,6 +179,13 @@ export default function Homepage() {
         }
     }, [fontsLoaded, profileLoading]);
 
+    // Refresh notification count when screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            refreshUnreadCount();
+        }, [refreshUnreadCount])
+    );
+
     // Hide splash screen when fonts are loaded
     useEffect(() => {
         async function hideSplash() {
@@ -243,38 +251,6 @@ export default function Homepage() {
         completed: "#9E9E9E",
     };
 
-    // Notifications
-    const sampleNotifications = [
-        {
-            id: "1",
-            title: "New Scheduled Booking!",
-            message: "Click here to view details and prepare for the appointment.",
-            date: "2025-09-27",
-            type: "booking",
-            icon: "calendar-outline",
-            read: false,
-        },
-        {
-            id: "2",
-            title: "Congratulations!",
-            message: "Your application has been approved. Click here to see details.",
-            date: "2025-09-26",
-            type: "approval",
-            icon: "checkmark-circle-outline",
-            read: true,
-        },
-        {
-            id: "3",
-            title: "Service Cancelled",
-            message: "You cancelled the service due to personal reasons.",
-            date: "2025-09-25",
-            type: "cancellation",
-            icon: "close-circle-outline",
-            read: false,
-        },
-    ];
-    const notificationCount = sampleNotifications.filter((n) => !n.read).length;
-
     return (
         <ApprovedScreenWrapper activeTab="home" isApproved={isApproved}>
             <ScrollView
@@ -317,19 +293,14 @@ export default function Homepage() {
 
                         {/* Notification Icon */}
                         <Pressable
-                            onPress={() =>
-                                router.push({
-                                    pathname: "/notification",
-                                    params: {notifications: JSON.stringify(sampleNotifications)},
-                                })
-                            }
+                            onPress={() => router.push("provider/notifications" as any)}
                             style={styles.iconButton}
                         >
                             <View style={styles.bellWrapper}>
                                 <Ionicons name="notifications-outline" size={26} color="#333"/>
-                                {notificationCount > 0 && (
+                                {unreadCount > 0 && (
                                     <View style={styles.badge}>
-                                        <Text style={styles.badgeText}>{notificationCount}</Text>
+                                        <Text style={styles.badgeText}>{unreadCount}</Text>
                                     </View>
                                 )}
                             </View>

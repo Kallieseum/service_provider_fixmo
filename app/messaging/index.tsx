@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { format, parseISO } from "date-fns";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -27,6 +27,7 @@ export default function MessagesListScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
     const socketRef = useRef<Socket | null>(null);
+    const currentUserIdRef = useRef<string | null>(null);
     
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([]);
@@ -34,6 +35,42 @@ export default function MessagesListScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [isConnected, setIsConnected] = useState(false);
+
+    // Refresh conversations when screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            checkUserAndRefresh();
+        }, [])
+    );
+
+    const checkUserAndRefresh = async () => {
+        const providerId = await AsyncStorage.getItem("provider_id");
+        
+        // If user has changed, clear conversations and reload
+        if (currentUserIdRef.current !== null && currentUserIdRef.current !== providerId) {
+            console.log('🔄 Different user detected, clearing conversations');
+            setConversations([]);
+            setFilteredConversations([]);
+            setLoading(true);
+            
+            // Disconnect old socket
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
+            
+            // Reinitialize for new user
+            await initializeMessaging();
+        } else if (!currentUserIdRef.current) {
+            // First load
+            await initializeMessaging();
+        } else {
+            // Same user, just refresh
+            await fetchConversations();
+        }
+        
+        currentUserIdRef.current = providerId;
+    };
 
     useEffect(() => {
         initializeMessaging();

@@ -1,16 +1,16 @@
-import React, {useCallback, useEffect, useState} from "react";
+import { useUserContext } from "@/context/UserContext";
+import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect, useRouter } from "expo-router";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-    View,
-    Text,
-    StyleSheet,
-    ScrollView,
-    SafeAreaView,
-    TouchableOpacity,
     BackHandler,
+    SafeAreaView,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from "react-native";
-import {Ionicons} from "@expo/vector-icons";
-import {useUserContext} from "@/context/UserContext";
-import {useFocusEffect, useRouter} from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type ServiceRating = {

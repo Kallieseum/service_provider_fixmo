@@ -1,4 +1,5 @@
 import { BookingProvider } from "@/context/BookingContext";
+import { NotificationProvider } from "@/context/NotificationContext";
 import { useFonts } from "expo-font";
 import { Slot } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -57,16 +58,18 @@ export default function Layout() {
     };
 
     return (
-        <BookingProvider>
-            <SafeAreaView style={{flex: 1}}>
-                <StatusBar style="dark"/>
-                <KeyboardAvoidingView
-                    style={{flex: 1}}
-                    behavior={Platform.OS === "ios" ? "padding" : "height"}
-                >
-                    <Slot/>
-                </KeyboardAvoidingView>
-            </SafeAreaView>
-        </BookingProvider>
+        <NotificationProvider>
+            <BookingProvider>
+                <SafeAreaView style={{flex: 1}}>
+                    <StatusBar style="dark"/>
+                    <KeyboardAvoidingView
+                        style={{flex: 1}}
+                        behavior={Platform.OS === "ios" ? "padding" : "height"}
+                    >
+                        <Slot/>
+                    </KeyboardAvoidingView>
+                </SafeAreaView>
+            </BookingProvider>
+        </NotificationProvider>
     );
 }

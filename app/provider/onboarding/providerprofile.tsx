@@ -18,6 +18,7 @@ import {
     View,
 } from "react-native";
 import { getDetailedProviderProfile, ProviderProfile as ProviderProfileType } from "../../../src/api/auth.api";
+import { unregisterPushToken } from "../../../src/utils/notificationhelper";
 
 type MenuItem = {
     label: string;
@@ -97,10 +98,29 @@ export default function ProviderProfile() {
         }).start(() => setShowLogoutModal(false));
     };
 
-    const handleLogout = () => {
-        logout();
-        closeLogout();
-        router.replace("/");
+    const handleLogout = async () => {
+        try {
+            // Get token before clearing storage
+            const token = await AsyncStorage.getItem('providerToken');
+            
+            // Unregister push token (non-blocking)
+            if (token) {
+                unregisterPushToken(token).catch(error => {
+                    console.error('Failed to unregister push token:', error);
+                });
+            }
+
+            // Clear storage and logout
+            logout();
+            closeLogout();
+            router.replace("/");
+        } catch (error) {
+            console.error('Logout error:', error);
+            // Still proceed with logout even if push cleanup fails
+            logout();
+            closeLogout();
+            router.replace("/");
+        }
     };
 
     const renderMenuItem = (item: MenuItem, restricted = false) => {
