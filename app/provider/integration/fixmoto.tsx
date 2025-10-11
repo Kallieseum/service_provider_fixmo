@@ -18,12 +18,12 @@ import {
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { completeAppointment, getAppointmentsByProviderId, startEnRoute } from "../../../src/api/booking.api";
-import CompleteServiceModal from "../../../src/components/modals/CompleteServiceModal";
 import BackjobBadge from "../../../src/components/backjob/BackjobBadge";
-import DisputeBackjobModal from "./modals/DisputeBackjobModal";
+import CompleteServiceModal from "../../../src/components/modals/CompleteServiceModal";
 import { API_CONFIG } from "../../../src/constants/config";
 import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
 import type { Appointment } from "../../../src/types/appointment";
+import DisputeBackjobModal from "./modals/DisputeBackjobModal";
 
 if (Platform.OS === "android") {
     UIManager.setLayoutAnimationEnabledExperimental?.(true);

@@ -14,11 +14,11 @@ import {
     View,
 } from "react-native";
 import { Calendar, DateData } from "react-native-calendars";
-import { rescheduleBackjob } from "../../../src/api/backjob.api";
 import { getProviderAvailability } from "../../../src/api/availability.api";
+import { rescheduleBackjob } from "../../../src/api/backjob.api";
 import { getAppointmentsByProviderId } from "../../../src/api/booking.api";
-import type { Availability } from "../../../src/types/availability";
 import type { Appointment } from "../../../src/types/appointment";
+import type { Availability } from "../../../src/types/availability";
 
 interface MarkedDates {
     [date: string]: {
