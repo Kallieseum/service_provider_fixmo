@@ -19,6 +19,8 @@ import {
 import MapView, { Marker } from "react-native-maps";
 import { completeAppointment, getAppointmentsByProviderId, startEnRoute } from "../../../src/api/booking.api";
 import CompleteServiceModal from "../../../src/components/modals/CompleteServiceModal";
+import BackjobBadge from "../../../src/components/backjob/BackjobBadge";
+import DisputeBackjobModal from "./modals/DisputeBackjobModal";
 import { API_CONFIG } from "../../../src/constants/config";
 import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
 import type { Appointment } from "../../../src/types/appointment";
@@ -35,6 +37,7 @@ const statusColors: Record<string, string> = {
     "in-progress": "#F44336",
     ongoing: "#F44336",
     "in-warranty": "#2196F3",
+    backjob: "#FF6B6B",  // Red for backjob - requires action
     finished: "#9E9E9E",
     completed: "#9E9E9E",
     cancelled: "#E53935",
@@ -48,7 +51,9 @@ export default function FixMoToday() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [completeModalVisible, setCompleteModalVisible] = useState(false);
+    const [disputeModalVisible, setDisputeModalVisible] = useState(false);
     const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+    const [selectedBackjobId, setSelectedBackjobId] = useState<number | null>(null);
     
     const router = useRouter();
     const isApproved = true;
@@ -366,8 +371,8 @@ export default function FixMoToday() {
             return apt.appointment_status === "confirmed" || apt.appointment_status === "in-progress" || apt.appointment_status === "ongoing";
         }
         if (activeTab === "finished") {
-            // Show in-warranty appointments (active warranty)
-            return apt.appointment_status === "in-warranty" || apt.appointment_status === "finished";
+            // Show in-warranty, finished, and backjob appointments
+            return apt.appointment_status === "in-warranty" || apt.appointment_status === "finished" || apt.appointment_status === "backjob";
         }
         if (activeTab === "completed") {
             // Show completed appointments (warranty expired)
@@ -436,6 +441,8 @@ export default function FixMoToday() {
                                                 ? "Scheduled"
                                                 : item.appointment_status === "in-warranty"
                                                 ? "In Warranty"
+                                                : item.appointment_status === "backjob"
+                                                ? "Backjob"
                                                 : item.appointment_status === "completed"
                                                 ? "Completed"
                                                 : item.appointment_status.charAt(0).toUpperCase() + item.appointment_status.slice(1)}
@@ -443,6 +450,19 @@ export default function FixMoToday() {
                                     </View>
 
                                     <Text style={styles.bookingId}>Booking ID# {item.appointment_id}</Text>
+                                    
+                                    {item.current_backjob && (
+                                        <View style={styles.backjobBadgeContainer}>
+                                            <BackjobBadge status={item.current_backjob.status} size="medium" />
+                                            {item.current_backjob.reason && (
+                                                <View style={styles.backjobReasonBox}>
+                                                    <Text style={styles.backjobReasonLabel}>Customer's Reason:</Text>
+                                                    <Text style={styles.backjobReasonText}>{item.current_backjob.reason}</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    )}
+                                    
                                     <Text style={styles.clientName}>{clientName}</Text>
                                     <Text style={styles.serviceType}>
                                         Service Type: <Text
@@ -502,6 +522,46 @@ export default function FixMoToday() {
                                                 </View>
                                             )}
 
+                                            {item.appointment_status === "confirmed" && isApproved && (
+                                                <TouchableOpacity 
+                                                    style={[styles.actionButton, { backgroundColor: "#FF9800" }]} 
+                                                    onPress={async () => {
+                                                        // Navigate to en route screen
+                                                        try {
+                                                            const providerData = await AsyncStorage.getItem('providerProfile');
+                                                            let providerLocation = '';
+                                                            if (providerData) {
+                                                                try {
+                                                                    const profile = JSON.parse(providerData);
+                                                                    providerLocation = profile.provider_exact_location || profile.exact_location || '';
+                                                                } catch (e) {
+                                                                    console.error('Error parsing provider profile:', e);
+                                                                }
+                                                            }
+
+                                                            router.push({
+                                                                pathname: "/provider/integration/enroutescreen",
+                                                                params: {
+                                                                    appointmentId: item.appointment_id.toString(),
+                                                                    customerId: item.customer_id.toString(),
+                                                                    customerName: getClientName(item),
+                                                                    serviceTitle: getServiceName(item),
+                                                                    scheduledDate: item.scheduled_date,
+                                                                    customerLocation: item.customer?.exact_location || `${item.customer?.latitude || 14.5995},${item.customer?.longitude || 120.9842}`,
+                                                                    providerLocation: item.provider?.provider_exact_location || providerLocation || '',
+                                                                },
+                                                            });
+                                                        } catch (error) {
+                                                            console.error('Error navigating to en route screen:', error);
+                                                            Alert.alert('Error', 'Failed to navigate to en route screen');
+                                                        }
+                                                    }}
+                                                >
+                                                    <Ionicons name="navigate" size={18} color="#FFF" style={{ marginRight: 8 }} />
+                                                    <Text style={styles.actionButtonText}>View En Route</Text>
+                                                </TouchableOpacity>
+                                            )}
+
                                             {(item.appointment_status === "in-progress" || item.appointment_status === "ongoing") && isApproved && (
                                                 <TouchableOpacity 
                                                     style={styles.actionButton} 
@@ -509,6 +569,48 @@ export default function FixMoToday() {
                                                 >
                                                     <Text style={styles.actionButtonText}>Complete Service</Text>
                                                 </TouchableOpacity>
+                                            )}
+
+                                            {item.appointment_status === "backjob" && isApproved && item.current_backjob && (
+                                                <View style={styles.backjobActionsContainer}>
+                                                    <View style={styles.backjobInfo}>
+                                                        <Ionicons name="warning" size={20} color="#FF6B6B" />
+                                                        <Text style={styles.backjobInfoText}>
+                                                            Customer has applied for warranty work
+                                                        </Text>
+                                                    </View>
+                                                    <View style={styles.backjobButtonsRow}>
+                                                        <TouchableOpacity 
+                                                            style={[styles.backjobButton, styles.disputeButton]}
+                                                            onPress={() => {
+                                                                setSelectedAppointment(item);
+                                                                setSelectedBackjobId(item.current_backjob?.backjob_id || null);
+                                                                setDisputeModalVisible(true);
+                                                            }}
+                                                        >
+                                                            <Ionicons name="close-circle" size={18} color="#FFF" />
+                                                            <Text style={styles.backjobButtonText}>Dispute</Text>
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity 
+                                                            style={[styles.backjobButton, styles.rescheduleButton]}
+                                                            onPress={() => {
+                                                                router.push({
+                                                                    pathname: "/provider/integration/reschedule-backjob",
+                                                                    params: {
+                                                                        appointmentId: item.appointment_id.toString(),
+                                                                        backjobId: item.current_backjob?.backjob_id.toString() || '',
+                                                                        customerName: getClientName(item),
+                                                                        serviceTitle: getServiceName(item),
+                                                                        currentDate: formatDateTime(item.scheduled_date),
+                                                                    },
+                                                                });
+                                                            }}
+                                                        >
+                                                            <Ionicons name="calendar" size={18} color="#FFF" />
+                                                            <Text style={styles.backjobButtonText}>Reschedule</Text>
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                </View>
                                             )}
 
                                             {(item.appointment_status === "in-warranty" || item.appointment_status === "completed" || item.appointment_status === "finished") && (
@@ -552,6 +654,23 @@ export default function FixMoToday() {
                     }
                     currentDescription={selectedAppointment?.repairDescription || ''}
                     clientName={selectedAppointment ? getClientName(selectedAppointment) : ''}
+                />
+
+                <DisputeBackjobModal
+                    visible={disputeModalVisible}
+                    backjobId={selectedBackjobId || 0}
+                    appointmentId={selectedAppointment?.appointment_id || 0}
+                    onClose={() => {
+                        setDisputeModalVisible(false);
+                        setSelectedAppointment(null);
+                        setSelectedBackjobId(null);
+                    }}
+                    onSuccess={() => {
+                        setDisputeModalVisible(false);
+                        setSelectedAppointment(null);
+                        setSelectedBackjobId(null);
+                        fetchAppointments(); // Refresh the list
+                    }}
                 />
             </View>
         </ApprovedScreenWrapper>
@@ -677,5 +796,73 @@ const styles = StyleSheet.create({
         fontFamily: "PoppinsSemiBold",
         color: "#2196F3",
         marginLeft: 6,
+    },
+    backjobBadgeContainer: {
+        marginVertical: 8,
+    },
+    backjobReasonBox: {
+        marginTop: 8,
+        padding: 10,
+        backgroundColor: "#FFF8E1",
+        borderRadius: 6,
+        borderLeftWidth: 3,
+        borderLeftColor: "#FF6B6B",
+    },
+    backjobReasonLabel: {
+        fontSize: 11,
+        fontFamily: "PoppinsSemiBold",
+        color: "#D32F2F",
+        marginBottom: 4,
+    },
+    backjobReasonText: {
+        fontSize: 12,
+        fontFamily: "PoppinsRegular",
+        color: "#333",
+        lineHeight: 18,
+    },
+    backjobActionsContainer: {
+        marginTop: 12,
+        padding: 12,
+        backgroundColor: "#FFF3E0",
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "#FF6B6B",
+    },
+    backjobInfo: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 12,
+    },
+    backjobInfoText: {
+        fontSize: 13,
+        fontFamily: "PoppinsMedium",
+        color: "#D32F2F",
+        marginLeft: 8,
+        flex: 1,
+    },
+    backjobButtonsRow: {
+        flexDirection: "row",
+        gap: 10,
+    },
+    backjobButton: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        gap: 6,
+    },
+    disputeButton: {
+        backgroundColor: "#9C27B0",
+    },
+    rescheduleButton: {
+        backgroundColor: "#FF9800",
+    },
+    backjobButtonText: {
+        fontSize: 13,
+        fontFamily: "PoppinsSemiBold",
+        color: "#FFF",
     },
 });
