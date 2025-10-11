@@ -1,20 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import {
-    View,
-    Text,
-    FlatList,
-    TouchableOpacity,
-    StyleSheet,
-    ActivityIndicator,
-    RefreshControl,
-    StatusBar,
-} from 'react-native';
-import { router } from 'expo-router';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getNotifications, markAllNotificationsAsRead, markNotificationAsRead } from '@/api/notifications.api';
+import { useNotifications } from '@/context/NotificationContext';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '@/api/notifications.api';
-import { useNotifications } from '@/context/NotificationContext';
+import { router } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    FlatList,
+    RefreshControl,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Notification {
     id: number;

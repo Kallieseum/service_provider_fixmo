@@ -1,9 +1,9 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
-import { setupNotificationListeners, clearBadgeCount } from '../utils/notificationhelper';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { getUnreadCount, markNotificationAsRead } from '../api/notifications.api';
+import { setupNotificationListeners } from '../utils/notificationhelper';
 
 type NotificationContextType = {
     unreadCount: number;

@@ -1,27 +1,27 @@
-import React, { useState, useEffect } from 'react';
 import {
-    View,
-    Text,
-    TouchableOpacity,
-    StyleSheet,
-    ScrollView,
+    getMyPushTokens,
+    getNotificationStats,
+    registerPushToken,
+    sendTestNotification
+} from '@/api/notifications.api';
+import { registerForPushNotificationsAsync } from '@/utils/notificationhelper';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import {
     ActivityIndicator,
     Alert,
     SafeAreaView,
+    ScrollView,
     StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
-import { 
-    getMyPushTokens, 
-    sendTestNotification, 
-    getNotificationStats,
-    registerPushToken 
-} from '@/api/notifications.api';
-import { registerForPushNotificationsAsync } from '@/utils/notificationhelper';
 
 export default function NotificationDebugScreen() {
     const router = useRouter();

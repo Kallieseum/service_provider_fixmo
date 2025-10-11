@@ -1,5 +1,5 @@
-import { Stack } from 'expo-router';
 import { NotificationProvider } from '@/context/NotificationContext';
+import { Stack } from 'expo-router';
 
 export default function OnboardingLayout() {
   return (
