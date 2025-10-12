@@ -175,3 +175,183 @@ export const getProviderRatingStats = async (
     return null;
   }
 };
+
+/**
+ * Unrated Appointment Interface
+ * This matches the actual backend response structure
+ */
+export interface UnratedAppointment {
+  appointment_id: number;
+  appointment_status: string;
+  scheduled_date: string;
+  completed_at?: string;
+  needs_rating?: boolean;
+  customer: {
+    user_id: number;          // Backend uses 'user_id' not 'customer_id'
+    email?: string;
+    first_name: string;
+    last_name: string;
+    profile_photo?: string;
+  };
+  serviceProvider?: {
+    provider_id: number;
+    business_name?: string;
+    first_name?: string;
+    last_name?: string;
+  };
+  service?: {
+    service_id: number;
+    service_title: string;
+    service_startingprice?: number;
+  };
+  final_price?: number;
+  repairDescription?: string;
+}
+
+export interface UnratedAppointmentsResponse {
+  success: boolean;
+  data: UnratedAppointment[];
+  pagination?: {
+    total_count: number;
+    page: number;
+    limit: number;
+  };
+  message?: string;
+}
+
+/**
+ * Get unrated appointments for a provider
+ * These are completed appointments that the provider hasn't rated yet
+ * 
+ * @param authToken - Provider's authentication token
+ * @param limit - Maximum number of appointments to return (default: 10)
+ * @returns List of unrated appointments
+ */
+export const getUnratedAppointments = async (
+  authToken: string,
+  limit: number = 10
+): Promise<UnratedAppointmentsResponse> => {
+  try {
+    const url = `${API_CONFIG.BASE_URL}/api/appointments/can-rate?userType=provider&limit=${limit}`;
+    
+    console.log('🔍 Checking for unrated appointments...');
+    console.log('🌐 API URL:', url);
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+
+    console.log('📡 Response status:', response.status, response.statusText);
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('❌ Failed to fetch unrated appointments. Status:', response.status);
+      console.error('❌ Error data:', data);
+      return {
+        success: false,
+        data: [],
+        message: data.message || 'Failed to fetch unrated appointments',
+      };
+    }
+
+    console.log('✅ Unrated appointments fetched:', {
+      count: data.data?.length || 0,
+      appointments: data.data,
+    });
+
+    return {
+      success: data.success,
+      data: data.data || [],
+      pagination: data.pagination,
+      message: data.message,
+    };
+  } catch (error: any) {
+    console.error('💥 Error fetching unrated appointments:', error);
+    return {
+      success: false,
+      data: [],
+      message: error.message || 'Network error',
+    };
+  }
+};
+
+/**
+ * Submit rating for a customer (Provider rates Customer)
+ * 
+ * @param authToken - Provider's authentication token
+ * @param appointmentId - Appointment ID
+ * @param customerId - Customer ID to rate
+ * @param ratingValue - Rating value (1-5)
+ * @param ratingComment - Optional comment
+ * @returns Success response
+ */
+export const submitCustomerRating = async (
+  authToken: string,
+  appointmentId: number,
+  customerId: number,
+  ratingValue: number,
+  ratingComment?: string
+): Promise<{ success: boolean; message?: string; data?: any }> => {
+  try {
+    const url = `${API_CONFIG.BASE_URL}/api/ratings/provider/rate-customer`;
+    
+    console.log('📝 Submitting customer rating:', {
+      appointmentId,
+      customerId,
+      ratingValue,
+      hasComment: !!ratingComment,
+    });
+    
+    const requestBody = {
+      appointment_id: appointmentId,
+      customer_id: customerId,
+      rating_value: ratingValue,
+      rating_comment: ratingComment?.trim() || null,
+    };
+    
+    console.log('📤 Request URL:', url);
+    console.log('📤 Request body:', JSON.stringify(requestBody, null, 2));
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    console.log('📡 Response status:', response.status, response.statusText);
+
+    const data = await response.json();
+    console.log('📡 Response data:', JSON.stringify(data, null, 2));
+
+    if (!response.ok) {
+      console.error('❌ Failed to submit rating. Status:', response.status);
+      console.error('❌ Error data:', data);
+      return {
+        success: false,
+        message: data.message || 'Failed to submit rating',
+      };
+    }
+
+    console.log('✅ Rating submitted successfully:', data);
+
+    return {
+      success: true,
+      message: data.message || 'Rating submitted successfully',
+      data: data.data,
+    };
+  } catch (error: any) {
+    console.error('💥 Error submitting rating:', error);
+    return {
+      success: false,
+      message: error.message || 'Network error',
+    };
+  }
+};

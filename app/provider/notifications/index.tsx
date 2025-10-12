@@ -1,4 +1,4 @@
-import { getNotifications, markAllNotificationsAsRead, markNotificationAsRead } from '@/api/notifications.api';
+import { markAllNotificationsAsRead, markNotificationAsRead } from '@/api/notifications.api';
 import { useNotifications } from '@/context/NotificationContext';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -30,9 +30,10 @@ export default function NotificationsScreen() {
     const insets = useSafeAreaInsets();
     const { refreshUnreadCount } = useNotifications();
     const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
+    // Notification fetching is disabled as the backend endpoint doesn't exist
     const fetchNotifications = async (showLoading = true) => {
         try {
             if (showLoading) setLoading(true);
@@ -43,8 +44,10 @@ export default function NotificationsScreen() {
                 return;
             }
 
-            const data = await getNotifications(token, 50);
-            setNotifications(data);
+            // Backend endpoint /api/notifications does not exist
+            // Notifications are handled via push notifications only
+            console.log('Notification history endpoint not available');
+            setNotifications([]);
         } catch (error) {
             console.error('Failed to fetch notifications:', error);
         } finally {
@@ -54,7 +57,8 @@ export default function NotificationsScreen() {
     };
 
     useEffect(() => {
-        fetchNotifications();
+        // Don't fetch notifications on mount since the endpoint doesn't exist
+        setLoading(false);
     }, []);
 
     const onRefresh = useCallback(() => {

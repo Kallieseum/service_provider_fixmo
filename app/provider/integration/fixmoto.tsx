@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { completeAppointment, getAppointmentsByProviderId, startEnRoute } from "../../../src/api/booking.api";
+import { getUnratedAppointments } from "../../../src/api/ratings.api";
 import BackjobBadge from "../../../src/components/backjob/BackjobBadge";
 import CompleteServiceModal from "../../../src/components/modals/CompleteServiceModal";
 import { API_CONFIG } from "../../../src/constants/config";
@@ -54,6 +55,7 @@ export default function FixMoToday() {
     const [disputeModalVisible, setDisputeModalVisible] = useState(false);
     const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
     const [selectedBackjobId, setSelectedBackjobId] = useState<number | null>(null);
+    const [isRatingPopupShown, setIsRatingPopupShown] = useState(false);
     
     const router = useRouter();
     const isApproved = true;
@@ -80,9 +82,106 @@ export default function FixMoToday() {
         }
     }, []);
 
+    // Check for unrated appointments
+    const checkForUnratedAppointments = useCallback(async () => {
+        if (isRatingPopupShown || completeModalVisible || disputeModalVisible) {
+            console.log('⏭️ Skipping rating check - modal is open or rating already shown');
+            return;
+        }
+
+        try {
+            console.log('=== CHECKING FOR UNRATED APPOINTMENTS (PROVIDER) ===');
+            const token = await AsyncStorage.getItem('providerToken');
+            
+            if (!token) {
+                console.log('⚠️ No auth token found, skipping rating check');
+                return;
+            }
+
+            const response = await getUnratedAppointments(token, 10);
+            
+            if (response.success && response.data && response.data.length > 0) {
+                console.log('🎯 Found unrated appointment(s):', response.data.length);
+                const appointmentToRate = response.data[0];
+                
+                // Debug: Log the full appointment object structure
+                console.log('📋 Full appointment data:', JSON.stringify(appointmentToRate, null, 2));
+                
+                // Validate required data before navigating
+                if (!appointmentToRate.appointment_id) {
+                    console.error('❌ Missing appointment_id in unrated appointment');
+                    return;
+                }
+                
+                // Validate customer object exists
+                if (!appointmentToRate.customer) {
+                    console.error('❌ Missing customer object in unrated appointment');
+                    return;
+                }
+                
+                // Get customer_id from the customer object (backend uses 'user_id' field)
+                const customerId = (appointmentToRate.customer as any).customer_id || 
+                                 (appointmentToRate.customer as any).user_id;
+                
+                if (!customerId) {
+                    console.error('❌ Missing customer_id/user_id in customer object');
+                    console.error('📋 Customer object:', appointmentToRate.customer);
+                    console.error('📋 Available keys:', Object.keys(appointmentToRate.customer));
+                    return;
+                }
+                
+                console.log('✅ Valid rating data:', {
+                    appointment_id: appointmentToRate.appointment_id,
+                    customer_id: customerId,
+                    customer_name: `${appointmentToRate.customer.first_name || ''} ${appointmentToRate.customer.last_name || ''}`.trim()
+                });
+                
+                setIsRatingPopupShown(true);
+                
+                // Navigate to rating screen
+                router.push({
+                    pathname: '/provider/integration/rate-customer',
+                    params: {
+                        appointment_id: appointmentToRate.appointment_id.toString(),
+                        customer_id: customerId.toString(),
+                        customer_name: `${appointmentToRate.customer?.first_name || ''} ${appointmentToRate.customer?.last_name || ''}`.trim() || 'Customer',
+                        service_title: appointmentToRate.service?.service_title || 'Service',
+                        scheduled_date: appointmentToRate.scheduled_date,
+                    }
+                });
+            } else {
+                console.log('✅ No unrated appointments found');
+            }
+        } catch (error: any) {
+            console.error('❌ Error checking for unrated appointments:', error);
+        }
+    }, [isRatingPopupShown, completeModalVisible, disputeModalVisible, router]);
+
     useEffect(() => {
         fetchAppointments();
     }, [fetchAppointments]);
+
+    // Initial check for unrated appointments (3 seconds after mount)
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            console.log('🕐 Initial unrated appointments check...');
+            checkForUnratedAppointments();
+        }, 3000);
+
+        return () => clearTimeout(timer);
+    }, [checkForUnratedAppointments]);
+
+    // Background periodic check (every 30 seconds)
+    useEffect(() => {
+        const intervalId = setInterval(() => {
+            if (!isRatingPopupShown && !completeModalVisible && !disputeModalVisible) {
+                console.log('🔄 Background check for unrated appointments...');
+                checkForUnratedAppointments();
+            }
+        }, 30000); // 30 seconds
+
+        return () => clearInterval(intervalId);
+    }, [checkForUnratedAppointments, isRatingPopupShown, completeModalVisible, disputeModalVisible]);
 
     const onRefresh = () => {
         setRefreshing(true);
@@ -310,7 +409,7 @@ export default function FixMoToday() {
             }
         }
         // Fallback to latitude/longitude fields
-        if (appointment.customer?.latitude && appointment.customer?.longitude) {
+        if (appointment.customer?.latitude != null && appointment.customer?.longitude != null) {
             return `${appointment.customer.latitude.toFixed(6)}, ${appointment.customer.longitude.toFixed(6)}`;
         }
         return 'Location not available';
@@ -336,6 +435,11 @@ export default function FixMoToday() {
     };
 
     const isAppointmentDateReached = (scheduledDate: string): boolean => {
+        // 🧪 TEMPORARY: Date check disabled for testing
+        // TODO: Re-enable this check after testing
+        return true;
+        
+        /* ORIGINAL CODE - COMMENTED OUT FOR TESTING
         try {
             const appointmentDate = parseISO(scheduledDate);
             const now = new Date();
@@ -359,6 +463,7 @@ export default function FixMoToday() {
         } catch {
             return false;
         }
+        */
     };
 
     const filteredAppointments = appointments.filter((apt) => {
@@ -579,37 +684,47 @@ export default function FixMoToday() {
                                                             Customer has applied for warranty work
                                                         </Text>
                                                     </View>
-                                                    <View style={styles.backjobButtonsRow}>
-                                                        <TouchableOpacity 
-                                                            style={[styles.backjobButton, styles.disputeButton]}
-                                                            onPress={() => {
-                                                                setSelectedAppointment(item);
-                                                                setSelectedBackjobId(item.current_backjob?.backjob_id || null);
-                                                                setDisputeModalVisible(true);
-                                                            }}
-                                                        >
-                                                            <Ionicons name="close-circle" size={18} color="#FFF" />
-                                                            <Text style={styles.backjobButtonText}>Dispute</Text>
-                                                        </TouchableOpacity>
-                                                        <TouchableOpacity 
-                                                            style={[styles.backjobButton, styles.rescheduleButton]}
-                                                            onPress={() => {
-                                                                router.push({
-                                                                    pathname: "/provider/integration/reschedule-backjob",
-                                                                    params: {
-                                                                        appointmentId: item.appointment_id.toString(),
-                                                                        backjobId: item.current_backjob?.backjob_id.toString() || '',
-                                                                        customerName: getClientName(item),
-                                                                        serviceTitle: getServiceName(item),
-                                                                        currentDate: formatDateTime(item.scheduled_date),
-                                                                    },
-                                                                });
-                                                            }}
-                                                        >
-                                                            <Ionicons name="calendar" size={18} color="#FFF" />
-                                                            <Text style={styles.backjobButtonText}>Reschedule</Text>
-                                                        </TouchableOpacity>
-                                                    </View>
+                                                    
+                                                    {item.current_backjob.status === 'disputed' ? (
+                                                        <View style={styles.disputedMessageContainer}>
+                                                            <Ionicons name="hourglass-outline" size={20} color="#FF9800" />
+                                                            <Text style={styles.disputedMessageText}>
+                                                                Already disputed. Waiting for admin to review.
+                                                            </Text>
+                                                        </View>
+                                                    ) : (
+                                                        <View style={styles.backjobButtonsRow}>
+                                                            <TouchableOpacity 
+                                                                style={[styles.backjobButton, styles.disputeButton]}
+                                                                onPress={() => {
+                                                                    setSelectedAppointment(item);
+                                                                    setSelectedBackjobId(item.current_backjob?.backjob_id || null);
+                                                                    setDisputeModalVisible(true);
+                                                                }}
+                                                            >
+                                                                <Ionicons name="close-circle" size={18} color="#FFF" />
+                                                                <Text style={styles.backjobButtonText}>Dispute</Text>
+                                                            </TouchableOpacity>
+                                                            <TouchableOpacity 
+                                                                style={[styles.backjobButton, styles.rescheduleButton]}
+                                                                onPress={() => {
+                                                                    router.push({
+                                                                        pathname: "/provider/integration/reschedule-backjob",
+                                                                        params: {
+                                                                            appointmentId: item.appointment_id.toString(),
+                                                                            backjobId: item.current_backjob?.backjob_id.toString() || '',
+                                                                            customerName: getClientName(item),
+                                                                            serviceTitle: getServiceName(item),
+                                                                            currentDate: formatDateTime(item.scheduled_date),
+                                                                        },
+                                                                    });
+                                                                }}
+                                                            >
+                                                                <Ionicons name="calendar" size={18} color="#FFF" />
+                                                                <Text style={styles.backjobButtonText}>Reschedule</Text>
+                                                            </TouchableOpacity>
+                                                        </View>
+                                                    )}
                                                 </View>
                                             )}
 
@@ -622,7 +737,7 @@ export default function FixMoToday() {
                                                         </View>
                                                     )}
                                                     <Text style={styles.completedLabel}>Final Price:</Text>
-                                                    <Text style={styles.completedValue}>₱{item.final_price.toFixed(2)}</Text>
+                                                    <Text style={styles.completedValue}>₱{item.final_price != null ? item.final_price.toFixed(2) : '0.00'}</Text>
                                                     {item.repairDescription && (
                                                         <>
                                                             <Text style={styles.completedLabel}>Repair Description:</Text>
@@ -864,5 +979,25 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontFamily: "PoppinsSemiBold",
         color: "#FFF",
+    },
+    disputedMessageContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#FFF3E0",
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "#FF9800",
+        gap: 8,
+        marginTop: 8,
+    },
+    disputedMessageText: {
+        flex: 1,
+        fontSize: 13,
+        fontFamily: "PoppinsMedium",
+        color: "#E65100",
+        lineHeight: 18,
     },
 });

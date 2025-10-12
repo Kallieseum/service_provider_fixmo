@@ -83,34 +83,35 @@ export async function removePushToken(
 
 /**
  * Get notification history for current user
+ * DISABLED: This endpoint does not exist on the backend
  */
-export async function getNotifications(
-  authToken: string,
-  limit: number = 50
-): Promise<any[]> {
-  try {
-    const response = await fetch(
-      `${API_CONFIG.BASE_URL}/api/notifications?limit=${limit}`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
-      }
-    );
+// export async function getNotifications(
+//   authToken: string,
+//   limit: number = 50
+// ): Promise<any[]> {
+//   try {
+//     const response = await fetch(
+//       `${API_CONFIG.BASE_URL}/api/notifications?limit=${limit}`,
+//       {
+//         method: 'GET',
+//         headers: {
+//           'Authorization': `Bearer ${authToken}`,
+//         },
+//       }
+//     );
 
-    const data = await response.json();
+//     const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(data.message || 'Failed to fetch notifications');
-    }
+//     if (!response.ok) {
+//       throw new Error(data.message || 'Failed to fetch notifications');
+//     }
 
-    return data.notifications || [];
-  } catch (error: any) {
-    console.error('Fetch notifications error:', error);
-    return [];
-  }
-}
+//     return data.notifications || [];
+//   } catch (error: any) {
+//     console.error('Fetch notifications error:', error);
+//     return [];
+//   }
+// }
 
 /**
  * Mark notification as read
@@ -175,12 +176,11 @@ export async function markAllNotificationsAsRead(
 
 /**
  * Get unread notification count
- * Since the backend doesn't have a dedicated unread-count endpoint,
- * we fetch recent notifications and count unread ones
+ * Returns 0 if the endpoint doesn't exist (backend may not have implemented this yet)
  */
 export async function getUnreadCount(authToken: string): Promise<number> {
   try {
-    // Try the dedicated endpoint first (if it exists in future)
+    // Try the dedicated endpoint first (if it exists)
     const response = await fetch(
       `${API_CONFIG.BASE_URL}/api/notifications/unread-count`,
       {
@@ -194,23 +194,15 @@ export async function getUnreadCount(authToken: string): Promise<number> {
     const data = await response.json();
 
     if (!response.ok) {
-      // If endpoint doesn't exist, fall back to counting from notifications list
-      console.log('Unread count endpoint not available, using fallback...');
-      const notifications = await getNotifications(authToken, 50);
-      return notifications.filter((n: any) => !n.read).length;
+      // If endpoint doesn't exist, return 0 (no fallback available)
+      console.log('Unread count endpoint not available, returning 0');
+      return 0;
     }
 
     return data.count || 0;
   } catch (error: any) {
-    console.log('Using fallback method for unread count');
-    // Fallback: Get notifications and count unread
-    try {
-      const notifications = await getNotifications(authToken, 50);
-      return notifications.filter((n: any) => !n.read).length;
-    } catch (fallbackError) {
-      console.error('Fetch unread count error (fallback also failed):', fallbackError);
-      return 0;
-    }
+    console.log('Unread count endpoint error, returning 0');
+    return 0;
   }
 }
 
