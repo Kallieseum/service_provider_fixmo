@@ -17,13 +17,14 @@ import {
     View,
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
-import { completeAppointment, getAppointmentsByProviderId, startEnRoute } from "../../../src/api/booking.api";
+import { cancelAppointmentByProvider, completeAppointment, getAppointmentsByProviderId, startEnRoute } from "../../../src/api/booking.api";
 import { getUnratedAppointments } from "../../../src/api/ratings.api";
 import BackjobBadge from "../../../src/components/backjob/BackjobBadge";
 import CompleteServiceModal from "../../../src/components/modals/CompleteServiceModal";
 import { API_CONFIG } from "../../../src/constants/config";
 import ApprovedScreenWrapper from "../../../src/navigation/ApprovedScreenWrapper";
 import type { Appointment } from "../../../src/types/appointment";
+import CancelAppointmentModal from "./modals/CancelAppointmentModal";
 import DisputeBackjobModal from "./modals/DisputeBackjobModal";
 
 if (Platform.OS === "android") {
@@ -53,6 +54,7 @@ export default function FixMoToday() {
     const [refreshing, setRefreshing] = useState(false);
     const [completeModalVisible, setCompleteModalVisible] = useState(false);
     const [disputeModalVisible, setDisputeModalVisible] = useState(false);
+    const [cancelModalVisible, setCancelModalVisible] = useState(false);
     const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
     const [selectedBackjobId, setSelectedBackjobId] = useState<number | null>(null);
     const [isRatingPopupShown, setIsRatingPopupShown] = useState(false);
@@ -376,6 +378,56 @@ export default function FixMoToday() {
         }
     };
 
+    const handleCancelAppointment = (appointment: Appointment) => {
+        setSelectedAppointment(appointment);
+        setCancelModalVisible(true);
+    };
+
+    const handleCancelConfirm = async (reason: string) => {
+        if (!selectedAppointment) return;
+
+        try {
+            const token = await AsyncStorage.getItem('providerToken');
+            if (!token) {
+                Alert.alert('Error', 'Authentication required');
+                return;
+            }
+
+            console.log('🗑️ Cancelling appointment:', {
+                appointmentId: selectedAppointment.appointment_id,
+                reason: reason.substring(0, 50) + '...'
+            });
+
+            const response = await cancelAppointmentByProvider(
+                selectedAppointment.appointment_id,
+                reason,
+                token
+            );
+
+            if (!response.success) {
+                throw new Error(response.message || 'Failed to cancel appointment');
+            }
+
+            Alert.alert(
+                'Appointment Cancelled',
+                'The appointment has been cancelled and the customer has been notified.',
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => {
+                            setCancelModalVisible(false);
+                            setSelectedAppointment(null);
+                            fetchAppointments(); // Refresh the list
+                        },
+                    },
+                ]
+            );
+        } catch (error: any) {
+            console.error('❌ Cancel appointment error:', error);
+            throw error; // Let modal handle the error
+        }
+    };
+
     const formatDateTime = (dateString: string) => {
         try {
             const date = parseISO(dateString);
@@ -613,18 +665,38 @@ export default function FixMoToday() {
                                             </MapView>
 
                                             {(item.appointment_status === "scheduled" || item.appointment_status === "approved") && isApproved && isAppointmentDateReached(item.scheduled_date) && (
-                                                <TouchableOpacity style={styles.actionButton} onPress={() => handleEnRoute(item)}>
-                                                    <Text style={styles.actionButtonText}>En Route to Fix</Text>
-                                                </TouchableOpacity>
+                                                <>
+                                                    <TouchableOpacity style={styles.actionButton} onPress={() => handleEnRoute(item)}>
+                                                        <Text style={styles.actionButtonText}>En Route to Fix</Text>
+                                                    </TouchableOpacity>
+                                                    
+                                                    <TouchableOpacity 
+                                                        style={[styles.actionButton, styles.cancelButton]} 
+                                                        onPress={() => handleCancelAppointment(item)}
+                                                    >
+                                                        <Ionicons name="close-circle-outline" size={18} color="#FF6B6B" style={{ marginRight: 6 }} />
+                                                        <Text style={[styles.actionButtonText, styles.cancelButtonText]}>Cancel Appointment</Text>
+                                                    </TouchableOpacity>
+                                                </>
                                             )}
 
                                             {(item.appointment_status === "scheduled" || item.appointment_status === "approved") && isApproved && !isAppointmentDateReached(item.scheduled_date) && (
-                                                <View style={styles.disabledButton}>
-                                                    <Ionicons name="time-outline" size={16} color="#999" />
-                                                    <Text style={styles.disabledButtonText}>
-                                                        Available on {format(parseISO(item.scheduled_date), "MMM dd, yyyy")} (from 8:00 AM)
-                                                    </Text>
-                                                </View>
+                                                <>
+                                                    <View style={styles.disabledButton}>
+                                                        <Ionicons name="time-outline" size={16} color="#999" />
+                                                        <Text style={styles.disabledButtonText}>
+                                                            Available on {format(parseISO(item.scheduled_date), "MMM dd, yyyy")} (from 8:00 AM)
+                                                        </Text>
+                                                    </View>
+                                                    
+                                                    <TouchableOpacity 
+                                                        style={[styles.actionButton, styles.cancelButton]} 
+                                                        onPress={() => handleCancelAppointment(item)}
+                                                    >
+                                                        <Ionicons name="close-circle-outline" size={18} color="#FF6B6B" style={{ marginRight: 6 }} />
+                                                        <Text style={[styles.actionButtonText, styles.cancelButtonText]}>Cancel Appointment</Text>
+                                                    </TouchableOpacity>
+                                                </>
                                             )}
 
                                             {item.appointment_status === "confirmed" && isApproved && (
@@ -786,6 +858,17 @@ export default function FixMoToday() {
                         setSelectedBackjobId(null);
                         fetchAppointments(); // Refresh the list
                     }}
+                />
+
+                <CancelAppointmentModal
+                    visible={cancelModalVisible}
+                    onClose={() => {
+                        setCancelModalVisible(false);
+                        setSelectedAppointment(null);
+                    }}
+                    onConfirm={handleCancelConfirm}
+                    customerName={selectedAppointment ? getClientName(selectedAppointment) : undefined}
+                    serviceTitle={selectedAppointment ? getServiceName(selectedAppointment) : undefined}
                 />
             </View>
         </ApprovedScreenWrapper>
@@ -999,5 +1082,15 @@ const styles = StyleSheet.create({
         fontFamily: "PoppinsMedium",
         color: "#E65100",
         lineHeight: 18,
+    },
+    cancelButton: {
+        backgroundColor: "#FFF",
+        borderWidth: 1.5,
+        borderColor: "#FF6B6B",
+        marginTop: 8,
+    },
+    cancelButtonText: {
+        color: "#FF6B6B",
+        fontFamily: "PoppinsSemiBold",
     },
 });

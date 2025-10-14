@@ -1,10 +1,10 @@
 import { API_CONFIG } from '../constants/config';
 import type {
-    Appointment,
-    AppointmentResponse,
-    AppointmentsListResponse,
-    UpdateAppointmentRequest,
-    UpdateAppointmentResponse,
+  Appointment,
+  AppointmentResponse,
+  AppointmentsListResponse,
+  UpdateAppointmentRequest,
+  UpdateAppointmentResponse,
 } from '../types/appointment';
 
 /**
@@ -220,4 +220,64 @@ export const completeAppointment = async (
     },
     token
   );
+};
+
+/**
+ * Cancel appointment by provider
+ * @param appointmentId - The ID of the appointment to cancel
+ * @param cancellationReason - Reason for cancellation
+ * @param token - Provider JWT authentication token
+ */
+export const cancelAppointmentByProvider = async (
+  appointmentId: number,
+  cancellationReason: string,
+  token: string
+): Promise<{ success: boolean; message: string; data?: any }> => {
+  try {
+    const url = `${API_CONFIG.BASE_URL}/api/appointments/${appointmentId}/provider-cancel`;
+    
+    console.log('📝 Cancelling appointment:', {
+      appointmentId,
+      hasReason: !!cancellationReason,
+    });
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        cancellation_reason: cancellationReason,
+      }),
+    });
+
+    console.log('📡 Response status:', response.status, response.statusText);
+
+    const data = await response.json();
+    console.log('📡 Response data:', data);
+
+    if (!response.ok) {
+      console.error('❌ Failed to cancel appointment. Status:', response.status);
+      console.error('❌ Error data:', data);
+      return {
+        success: false,
+        message: data.message || 'Failed to cancel appointment',
+      };
+    }
+
+    console.log('✅ Appointment cancelled successfully');
+
+    return {
+      success: true,
+      message: data.message || 'Appointment cancelled successfully',
+      data: data.data,
+    };
+  } catch (error: any) {
+    console.error('💥 Error cancelling appointment:', error);
+    return {
+      success: false,
+      message: error.message || 'Network error. Please try again.',
+    };
+  }
 };
