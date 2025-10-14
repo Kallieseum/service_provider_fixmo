@@ -148,7 +148,7 @@ export default function SignIn() {
 
                     <View style={{height: 80}}/>
 
-                    <TouchableOpacity onPress={() => router.push("/provider/onboarding/LocationScreen")}>
+                    <TouchableOpacity onPress={() => router.push("/provider/onboarding/email")}>
                         <Text style={styles.link}>
                             Don't have an account? <Text style={styles.linkText}>Sign up</Text>
                         </Text>
