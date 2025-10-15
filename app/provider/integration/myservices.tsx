@@ -245,7 +245,7 @@ export default function MyServices() {
             <StatusBar barStyle="dark-content" />
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()}>
+                <TouchableOpacity onPress={() => router.push("/provider/integration/fixmoto")}>
                     <Ionicons name="arrow-back" size={24} color="#000" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>My Services</Text>

@@ -1,12 +1,9 @@
-import { BookingProvider } from "@/context/BookingContext";
-import { NotificationProvider } from "@/context/NotificationContext";
 import { useFonts } from "expo-font";
 import { Slot } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { KeyboardAvoidingView, Platform, Text } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { Text } from "react-native";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete
 // Only call if the native module is available
@@ -24,7 +21,7 @@ export default function Layout() {
         PoppinsBold: require("../assets/fonts/Poppins-Bold.ttf"),
     });
 
-    // 👀 Keep splash screen until fonts are loaded
+    // Keep splash screen until fonts are loaded
     useEffect(() => {
         async function hideSplash() {
             if (fontsLoaded) {
@@ -44,32 +41,5 @@ export default function Layout() {
         return null; // Show nothing until fonts load
     }
 
-    // ✅ Apply Poppins globally
-    const oldRender = Text.render;
-    Text.render = function (...args) {
-        const origin = oldRender.call(this, ...args);
-        return {
-            ...origin,
-            props: {
-                ...origin.props,
-                style: [{fontFamily: "PoppinsRegular"}, origin.props.style],
-            },
-        };
-    };
-
-    return (
-        <NotificationProvider>
-            <BookingProvider>
-                <SafeAreaView style={{flex: 1}}>
-                    <StatusBar style="dark"/>
-                    <KeyboardAvoidingView
-                        style={{flex: 1}}
-                        behavior={Platform.OS === "ios" ? "padding" : "height"}
-                    >
-                        <Slot/>
-                    </KeyboardAvoidingView>
-                </SafeAreaView>
-            </BookingProvider>
-        </NotificationProvider>
-    );
+    return <Slot />;
 }
