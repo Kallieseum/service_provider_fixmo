@@ -1,9 +1,7 @@
 import { useFonts } from "expo-font";
 import { Slot } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
-import { Text } from "react-native";
 
 // Prevent the splash screen from auto-hiding before asset loading is complete
 // Only call if the native module is available
