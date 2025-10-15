@@ -259,30 +259,95 @@ export const loginProvider = async (
   password: string
 ): Promise<ProviderLoginResponse> => {
   try {
-    const response = await fetch(
-      `${API_CONFIG.BASE_URL}${API_CONFIG.AUTH_ENDPOINTS.PROVIDER_LOGIN}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          provider_email: email,
-          provider_password: password,
-        }),
-      }
-    );
+    const url = `${API_CONFIG.BASE_URL}${API_CONFIG.AUTH_ENDPOINTS.PROVIDER_LOGIN}`;
+    console.log('Login attempt to:', url);
+    console.log('Login email:', email);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
-    const data = await response.json();
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        provider_email: email,
+        provider_password: password,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+    console.log('Login response status:', response.status);
+    console.log('Login response headers:', JSON.stringify(Object.fromEntries(response.headers.entries())));
+
+    let data;
+    try {
+      const textResponse = await response.text();
+      console.log('Raw response:', textResponse);
+      data = JSON.parse(textResponse);
+      console.log('Parsed login data:', data);
+    } catch (parseError) {
+      console.error('Failed to parse login response:', parseError);
+      throw new Error('Invalid response from server. The server may be down or misconfigured.');
+    }
 
     if (!response.ok) {
+      const errorMessage = data.message || data.error || `Server returned ${response.status}`;
+      console.error('Login failed - Status:', response.status, 'Error:', errorMessage);
+      console.error('Full error response:', data);
+      
+      if (response.status === 401) {
+        throw new Error('Invalid email or password');
+      } else if (response.status === 404) {
+        throw new Error('Login endpoint not found. Please contact support.');
+      } else if (response.status === 500) {
+        // Backend error - provide helpful message
+        console.error('BACKEND ERROR: Server returned 500. This is a backend issue.');
+        throw new Error('Server error. The backend has an issue. Please contact support or try again later.');
+      }
+      
+      throw new Error(errorMessage);
+    }
+
+    if (!data.success) {
       throw new Error(data.message || 'Login failed');
     }
 
+    if (!data.token) {
+      throw new Error('No authentication token received');
+    }
+
+    console.log('Login successful');
     return data;
   } catch (error: any) {
-    console.error('Login Error:', error);
-    throw new Error(error.message || 'Network error. Please try again.');
+    console.error('Login Error Details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    });
+    
+    // Handle specific error types
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout. Please check your connection and try again.');
+    }
+    
+    if (error.message === 'Network request failed' || error.message.includes('fetch')) {
+      throw new Error('Cannot connect to server. Please check your internet connection.');
+    }
+    
+    if (error.message.includes('Invalid response')) {
+      throw error;
+    }
+    
+    // Re-throw the error with its original message if it's already formatted
+    if (error.message && !error.message.includes('undefined')) {
+      throw error;
+    }
+    
+    throw new Error('Server error during login. Please try again.');
   }
 };
 

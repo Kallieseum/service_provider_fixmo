@@ -18,6 +18,8 @@ import {
     View,
 } from "react-native";
 import { getDetailedProviderProfile, ProviderProfile as ProviderProfileType } from "../../../src/api/auth.api";
+import { unregisterPushToken } from "../../../src/utils/notificationhelper";
+import VerificationModal from "./components/VerificationModal";
 
 type MenuItem = {
     label: string;
@@ -29,6 +31,7 @@ const alwaysAvailable: MenuItem[] = [
     {label: "Edit Profile", icon: "create", route: "/provider/onboarding/editprofile"},
     {label: "Certificates", icon: "document-text", route: "/provider/onboarding/mycertificate"},
     {label: "Services", icon: "list", route: "/provider/onboarding/services"},
+    {label: "Report an Issue", icon: "flag", route: "/provider/integration/report"},
     {label: "Privacy Policy", icon: "shield", route: "/provider/integration/privacypolicy"},
     {label: "Log Out", icon: "log-out"}, // triggers logout modal
 
@@ -43,6 +46,7 @@ export default function ProviderProfile() {
     const router = useRouter();
     const {user, logout} = useUserContext();
     const [showLogoutModal, setShowLogoutModal] = useState(false);
+    const [showVerificationModal, setShowVerificationModal] = useState(false);
     const [providerProfile, setProviderProfile] = useState<ProviderProfileType | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -97,10 +101,29 @@ export default function ProviderProfile() {
         }).start(() => setShowLogoutModal(false));
     };
 
-    const handleLogout = () => {
-        logout();
-        closeLogout();
-        router.replace("/");
+    const handleLogout = async () => {
+        try {
+            // Get token before clearing storage
+            const token = await AsyncStorage.getItem('providerToken');
+            
+            // Unregister push token (non-blocking)
+            if (token) {
+                unregisterPushToken(token).catch(error => {
+                    console.error('Failed to unregister push token:', error);
+                });
+            }
+
+            // Clear storage and logout
+            logout();
+            closeLogout();
+            router.replace("/");
+        } catch (error) {
+            console.error('Logout error:', error);
+            // Still proceed with logout even if push cleanup fails
+            logout();
+            closeLogout();
+            router.replace("/");
+        }
     };
 
     const renderMenuItem = (item: MenuItem, restricted = false) => {
@@ -173,6 +196,41 @@ export default function ProviderProfile() {
                 </View>
             ) : (
                 <ScrollView ref={scrollRef} contentContainerStyle={{paddingBottom: 120}}>
+                    {/* Rejection Banner */}
+                    {providerProfile?.verification_status === 'rejected' && (
+                        <View style={styles.rejectionBanner}>
+                            <View style={styles.rejectionBannerContent}>
+                                <Ionicons name="alert-circle" size={32} color="#E53935" />
+                                <View style={styles.rejectionTextContainer}>
+                                    <Text style={styles.rejectionTitle}>Account Verification Rejected</Text>
+                                    <Text style={styles.rejectionReason}>
+                                        {providerProfile?.rejection_reason || 'Your verification was rejected. Please resubmit your documents.'}
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={styles.resubmitButton}
+                                        onPress={() => setShowVerificationModal(true)}
+                                    >
+                                        <Text style={styles.resubmitButtonText}>Resubmit Documents</Text>
+                                        <Ionicons name="arrow-forward" size={16} color="#fff" />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </View>
+                    )}
+
+                    {/* Pending Banner */}
+                    {providerProfile?.verification_status === 'pending' && (
+                        <View style={styles.pendingBanner}>
+                            <Ionicons name="time-outline" size={24} color="#FF9800" />
+                            <View style={styles.bannerTextContainer}>
+                                <Text style={styles.pendingTitle}>Verification Pending</Text>
+                                <Text style={styles.pendingMessage}>
+                                    Your documents are being reviewed. You'll be notified once approved.
+                                </Text>
+                            </View>
+                        </View>
+                    )}
+
                     {/* Header */}
                     <View style={styles.header}>
                         {providerProfile?.profile_photo ? (
@@ -238,8 +296,51 @@ export default function ProviderProfile() {
                     </Animated.View>
                 </View>
             </Modal>
+
+            {/* Verification Resubmission Modal */}
+            <VerificationModal
+                visible={showVerificationModal}
+                onClose={() => setShowVerificationModal(false)}
+                onSuccess={() => {
+                    setShowVerificationModal(false);
+                    // Reload profile to get updated verification status
+                    fetchProfile();
+                }}
+                rejectionReason={providerProfile?.rejection_reason || undefined}
+                currentUserData={{
+                    first_name: providerProfile?.first_name,
+                    last_name: providerProfile?.last_name,
+                    birthday: providerProfile?.birthday || undefined,
+                    location: providerProfile?.location || undefined,
+                    exact_location: providerProfile?.exact_location || undefined,
+                    profile_photo: providerProfile?.profile_photo || undefined,
+                    valid_id: providerProfile?.valid_id || undefined,
+                }}
+            />
         </ApprovedScreenWrapper>
     );
+
+    // Helper function to fetch profile (can be called from multiple places)
+    async function fetchProfile() {
+        try {
+            setLoading(true);
+            setError(null);
+            
+            const token = await AsyncStorage.getItem('providerToken');
+            if (!token) {
+                setError('No authentication token found');
+                return;
+            }
+
+            const profileData = await getDetailedProviderProfile(token);
+            setProviderProfile(profileData);
+        } catch (err: any) {
+            console.error('Failed to fetch provider profile:', err);
+            setError(err.message || 'Failed to load profile');
+        } finally {
+            setLoading(false);
+        }
+    }
 }
 
 const styles = StyleSheet.create({
@@ -412,5 +513,80 @@ const styles = StyleSheet.create({
     confirmText: {
         color: "#fff",
         fontFamily: "PoppinsSemiBold",
+    },
+    rejectionBanner: {
+        backgroundColor: "#FFEBEE",
+        margin: 16,
+        marginTop: 0,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#E53935",
+    },
+    rejectionBannerContent: {
+        flexDirection: "row",
+        padding: 16,
+        alignItems: "flex-start",
+    },
+    rejectionTextContainer: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    rejectionTitle: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#E53935",
+        fontFamily: "PoppinsSemiBold",
+        marginBottom: 6,
+    },
+    rejectionReason: {
+        fontSize: 14,
+        color: "#666",
+        fontFamily: "PoppinsRegular",
+        marginBottom: 12,
+        lineHeight: 20,
+    },
+    resubmitButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#E53935",
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+        alignSelf: "flex-start",
+    },
+    resubmitButtonText: {
+        color: "#fff",
+        fontSize: 14,
+        fontWeight: "600",
+        fontFamily: "PoppinsSemiBold",
+        marginRight: 6,
+    },
+    pendingBanner: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#FFF3E0",
+        margin: 16,
+        marginTop: 0,
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#FF9800",
+    },
+    bannerTextContainer: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    pendingTitle: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: "#FF9800",
+        fontFamily: "PoppinsSemiBold",
+        marginBottom: 4,
+    },
+    pendingMessage: {
+        fontSize: 13,
+        color: "#666",
+        fontFamily: "PoppinsRegular",
+        lineHeight: 18,
     },
 });

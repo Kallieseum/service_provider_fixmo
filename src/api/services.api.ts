@@ -30,7 +30,40 @@ export const getProviderServices = async (token: string): Promise<Service[]> => 
       throw new Error('Failed to fetch services');
     }
 
-    return data.data || [];
+    // Log raw response to debug (only first service to avoid clutter)
+    if (data.data && data.data.length > 0) {
+      console.log('📋 Raw service from backend:', JSON.stringify(data.data[0], null, 2));
+    }
+
+    // Backend inconsistency: GET endpoint returns different field names than database schema
+    // Database has: service_id, servicelisting_isActive
+    // GET /services returns: id, isActive (camelCase, no prefix)
+    // PATCH /toggle returns: service_id, servicelisting_isActive (correct)
+    
+    const services = (data.data || []).map(service => {
+      // Map backend field names to frontend expected names
+      const serviceId = (service as any).id || service.service_id;
+      const serviceTitle = (service as any).title || service.service_title;
+      
+      // Check all possible variations for the active status field
+      const isActive = service.servicelisting_isActive ?? 
+                      (service as any).isActive ?? 
+                      (service as any).is_active ?? 
+                      false;
+      
+      const convertedService = {
+        ...service,
+        service_id: serviceId,
+        service_title: serviceTitle,
+        servicelisting_isActive: Boolean(isActive)
+      };
+      
+      console.log(`✅ Service ${serviceId} (${serviceTitle}): isActive=${isActive} → converted=${convertedService.servicelisting_isActive}`);
+      
+      return convertedService;
+    });
+
+    return services;
   } catch (error: any) {
     console.error('Get Services Error:', error);
     throw new Error(error.message || 'Network error. Please try again.');
@@ -184,13 +217,22 @@ export const toggleServiceAvailability = async (
       }
     );
 
-    const data = await response.json();
+    const responseData = await response.json();
+    
+    console.log('Toggle API raw response:', responseData);
 
     if (!response.ok) {
-      throw new Error(data.message || 'Failed to toggle service availability');
+      throw new Error(responseData.message || 'Failed to toggle service availability');
     }
 
-    return data.data;
+    // Backend returns data wrapped in a 'data' property
+    const serviceData = responseData.data || responseData;
+    
+    // Convert servicelisting_isActive to proper boolean (backend might return 0/1)
+    return {
+      service_id: serviceData.service_id,
+      servicelisting_isActive: Boolean(serviceData.servicelisting_isActive)
+    };
   } catch (error: any) {
     console.error('Toggle Service Availability Error:', error);
     throw new Error(error.message || 'Network error. Please try again.');

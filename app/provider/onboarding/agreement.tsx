@@ -25,7 +25,7 @@ export default function AgreementScreen() {
     }>();
 
     const handleAgree = () => {
-        router.push({
+        router.replace({
             pathname: '/provider/onboarding/basicinfo',
             params: { 
                 email: params.email, 

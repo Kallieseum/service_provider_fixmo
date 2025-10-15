@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { format, parseISO } from "date-fns";
 import * as ImagePicker from "expo-image-picker";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -13,12 +13,14 @@ import {
     Linking,
     Platform,
     SafeAreaView,
+    StatusBar,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Socket } from "socket.io-client";
 import {
     getMessages,
@@ -30,9 +32,11 @@ import { MessageService } from "../../src/utils/messageAPI";
 
 export default function ChatScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const flatListRef = useRef<FlatList>(null);
     const socketRef = useRef<Socket | null>(null);
+    const currentUserIdRef = useRef<string | null>(null);
 
     const conversationId = parseInt(params.conversationId as string);
     const customerId = parseInt(params.customerId as string);
@@ -49,6 +53,35 @@ export default function ChatScreen() {
     const [replyingTo, setReplyingTo] = useState<Message | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [providerId, setProviderId] = useState<number | null>(null);
+
+    // Check for user changes when screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            checkUserAndRefresh();
+        }, [])
+    );
+
+    const checkUserAndRefresh = async () => {
+        const storedProviderId = await AsyncStorage.getItem("provider_id");
+        
+        // If user has changed, clear messages and reload
+        if (currentUserIdRef.current !== null && currentUserIdRef.current !== storedProviderId) {
+            console.log('🔄 Different user detected in chat, clearing messages');
+            setMessages([]);
+            setLoading(true);
+            
+            // Disconnect old socket
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
+            
+            // Reinitialize for new user
+            await initializeMessaging();
+        }
+        
+        currentUserIdRef.current = storedProviderId;
+    };
 
     useEffect(() => {
         initializeMessaging();
@@ -475,9 +508,10 @@ export default function ChatScreen() {
 
     if (loading) {
         return (
-            <SafeAreaView style={styles.container}>
+            <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar barStyle="dark-content" />
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#1e6355" />
+                    <ActivityIndicator size="large" color="#00796B" />
                     <Text style={styles.loadingText}>Loading messages...</Text>
                 </View>
             </SafeAreaView>
@@ -485,7 +519,8 @@ export default function ChatScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+            <StatusBar barStyle="dark-content" />
             <KeyboardAvoidingView
                 style={styles.container}
                 behavior={Platform.OS === "ios" ? "padding" : undefined}

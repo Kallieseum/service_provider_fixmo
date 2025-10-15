@@ -1,5 +1,10 @@
+import { NotificationProvider } from '@/context/NotificationContext';
 import { Stack } from 'expo-router';
 
 export default function OnboardingLayout() {
-  return <Stack screenOptions={{ headerShown: false }} />;
+  return (
+    <NotificationProvider>
+      <Stack screenOptions={{ headerShown: false }} />
+    </NotificationProvider>
+  );
 }

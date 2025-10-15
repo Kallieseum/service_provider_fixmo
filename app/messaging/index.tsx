@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { format, parseISO } from "date-fns";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
@@ -10,12 +10,14 @@ import {
     Image,
     RefreshControl,
     SafeAreaView,
+    StatusBar,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Socket } from "socket.io-client";
 import { getConversations } from "../../src/api/messages.api";
 import type { Conversation } from "../../src/types/message";
@@ -23,7 +25,9 @@ import { MessageService } from "../../src/utils/messageAPI";
 
 export default function MessagesListScreen() {
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const socketRef = useRef<Socket | null>(null);
+    const currentUserIdRef = useRef<string | null>(null);
     
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([]);
@@ -31,6 +35,42 @@ export default function MessagesListScreen() {
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [isConnected, setIsConnected] = useState(false);
+
+    // Refresh conversations when screen is focused
+    useFocusEffect(
+        useCallback(() => {
+            checkUserAndRefresh();
+        }, [])
+    );
+
+    const checkUserAndRefresh = async () => {
+        const providerId = await AsyncStorage.getItem("provider_id");
+        
+        // If user has changed, clear conversations and reload
+        if (currentUserIdRef.current !== null && currentUserIdRef.current !== providerId) {
+            console.log('🔄 Different user detected, clearing conversations');
+            setConversations([]);
+            setFilteredConversations([]);
+            setLoading(true);
+            
+            // Disconnect old socket
+            if (socketRef.current) {
+                socketRef.current.disconnect();
+                socketRef.current = null;
+            }
+            
+            // Reinitialize for new user
+            await initializeMessaging();
+        } else if (!currentUserIdRef.current) {
+            // First load
+            await initializeMessaging();
+        } else {
+            // Same user, just refresh
+            await fetchConversations();
+        }
+        
+        currentUserIdRef.current = providerId;
+    };
 
     useEffect(() => {
         initializeMessaging();
@@ -424,9 +464,10 @@ export default function MessagesListScreen() {
 
     if (loading) {
         return (
-            <SafeAreaView style={styles.container}>
+            <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar barStyle="dark-content" />
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#1e6355" />
+                    <ActivityIndicator size="large" color="#00796B" />
                     <Text style={styles.loadingText}>Loading conversations...</Text>
                 </View>
             </SafeAreaView>
@@ -434,11 +475,12 @@ export default function MessagesListScreen() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={[styles.container, { paddingTop: insets.top }]}>
+            <StatusBar barStyle="dark-content" />
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity
-                    onPress={() => router.push('/provider/onboarding/pre_homepage')}
+                    onPress={() => router.replace('/provider/onboarding/pre_homepage')}
                     style={styles.backButton}
                 >
                     <Ionicons name="arrow-back" size={24} color="#000" />

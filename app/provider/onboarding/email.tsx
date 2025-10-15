@@ -41,7 +41,7 @@ export default function EmailScreen() {
                     {
                         text: 'OK',
                         onPress: () => {
-                            router.push({
+                            router.replace({
                                 pathname: '/provider/onboarding/otp',
                                 params: {email},
                             });

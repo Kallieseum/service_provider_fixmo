@@ -18,6 +18,7 @@ import {
     View,
 } from "react-native";
 import { loginProvider } from "../../../src/api/auth.api";
+import { registerPushTokenWithBackend } from "../../../src/utils/notificationhelper";
 
 export default function SignIn() {
     const router = useRouter();
@@ -56,6 +57,16 @@ export default function SignIn() {
                 await AsyncStorage.setItem('providerToken', response.token);
                 await AsyncStorage.setItem('providerId', response.providerId.toString());
                 await AsyncStorage.setItem('providerUserName', response.providerUserName);
+
+                // Register push notification token (non-blocking)
+                registerPushTokenWithBackend(
+                    response.providerId,
+                    'provider',
+                    response.token
+                ).catch(error => {
+                    console.error('Failed to register push token:', error);
+                    // Don't block login flow if push registration fails
+                });
 
                 // Navigate to home screen with provider data
                 router.replace({

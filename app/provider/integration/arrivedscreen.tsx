@@ -23,7 +23,7 @@ export default function ArrivedScreen() {
             <View style={styles.buttonRow}>
                 <TouchableOpacity
                     style={[styles.button, {backgroundColor: "#3b82f6"}]}
-                    onPress={() => router.push("/provider/integration/fixmotoday")}
+                    onPress={() => router.push("./provider/integration/fixmotoday")}
                 >
                     <Text style={styles.buttonText}>Back to Today</Text>
                 </TouchableOpacity>

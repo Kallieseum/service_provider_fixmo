@@ -1,4 +1,4 @@
-import React, {createContext, useContext, useState, useEffect} from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 
 type ScheduledWork = {
     status: "scheduled" | "ongoing" | "finished";
@@ -162,6 +162,15 @@ export const UserProvider = ({children}: { children: React.ReactNode }) => {
 
         setNotifications([]);
         setArchivedNotifications([]);
+        
+        // Reset MessageService to clear cached conversations
+        try {
+            const { MessageService } = require('../utils/messageAPI');
+            MessageService.reset();
+            console.log('🧹 MessageService reset on logout');
+        } catch (error) {
+            console.error('Failed to reset MessageService:', error);
+        }
     };
 
     const notificationCount = notifications.filter((n) => !n.read).length;
